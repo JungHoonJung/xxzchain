@@ -21,11 +21,7 @@ import warnings
 
 
 class System:
-    """A environment object of calculation.
-
-    Please make sure your system's size and symmetry that you want to use.
-    Support 1 ~ 32 lattice size.
-    You can see the summery of your system through 'System.tree'
+    """A environment object of whole calculation.
 
     Parameters
     ----------
@@ -36,16 +32,27 @@ class System:
     dtype : ``np.dtype``
         Description of parameter `dtype`.
 
+
+    Please make sure your system's size that you want to use. Support 1 ~ 32 lattice size.
+    You can see the summery of your system through 'System.tree'.
+
+    .. note::
+        In many calculation, we represent spin configuration as binary.
+        Generally, 4bytes-integer(``int``) is consist of 32 bits. It's the reason why this package support system size below 32.
+
     Attributes
     ----------
-    range : type
-        Description of attribute `range`.
-    parent : type
-        Description of attribute `parent`.
-    Odtype : type
-        Description of attribute `Odtype`.
+    range : ``range`` (`built-in`)
+        Equivalent to ``range(size)``.
+    Odtype : ``np.complex128``
+        Data type of operator's elements.
+    Hamiltonian : :py:class:`xxzchian.core.Operator`
+        Hamiltonian operator of this system. Only operator which is defined on this system can be Hamiltonian.
 
 
+    .. note::
+        :py:attr:`xxzchain.core.Basis.energy` and :py:meth:`xxzchain.core.State.time_evolving` or
+        :py:meth:`xxzchain.core.State.time_evolving_states` will be affected by this property.
     """
     #'''A environment object of quantum calculation.
 #
@@ -91,67 +98,81 @@ class System:
 
 
     ############      tree        ################
-    @property
-    def tree(self):
-        return
+    def tree():
+        #doc =
+        def fget(self):
+            if not self.__initialized:
+                print("System must be initialized. please make sure your path and file with 'initialize(path)'")
+            print("Hardcore boson system")
+            path = '-----' if self.path is None else os.path.abspath(self.path)
+            print("Name         : {}".format(self.name))
+            print("Saved path   : {}".format(path))
+            print("System size  : {}\n".format(self.size))
+            print("Referenced Basis :   (None means full)")
+            print('\t|- Sector {} '.format(self.__basis.symmetry))
+            print('\t-----\n')
 
-    #print summery of system, return is None
-    @tree.getter
-    def tree(self):
-        if not self.__initialized:
-            print("System must be initialized. please make sure your path and file with 'initialize(path)'")
-        print("Hardcore boson system")
-        path = '-----' if self.path is None else os.path.abspath(self.path)
-        print("Name         : {}".format(self.name))
-        print("Saved path   : {}".format(path))
-        print("System size  : {}\n".format(self.size))
-        print("Referenced Basis :   (None means full)")
-        print('\t|- Sector {} '.format(self.__basis.symmetry))
-        print('\t-----\n')
+            H = '-----' if self.__H is None else "'{}'".format(self.__H)
 
-        H = '-----' if self.__H is None else "'{}'".format(self.__H)
-
-        print("Defined Operators :")
-        i = 0
-        for op in self._Operator:
-            print('\t|- {}'.format(op))
-            if i>5:
-                print('\t|- ...')
-                break
-            i+=1
-        print('\t-----')
-        print("\tHamiltonian  : {}\n".format(H))
-        if self._State:
-            print("Defined States :")
+            print("Defined Operators :")
             i = 0
-            for st in self._State:
-                print('\t|- {}'.format(st))
+            for op in self._Operator:
+                print('\t|- {}'.format(op))
                 if i>5:
                     print('\t|- ...')
                     break
-                    i+=1
-            print('\t-----\n')
-        if self._function:
-            print("Defined Functions :")
-            i = 0
-            for st in self._function:
-                print('\t|- {}'.format(st))
-                if i>5:
-                    print('\t|- ...')
-                    break
-                    i+=1
-            print('\t-----\n')
-        if self.saver.is_exist('data'):
-            i = 0
-            print("Stored Data :")
-            for st in self.saver['data']:
-                print('\t|- {}'.format(st))
-                if i>5:
-                    print('\t|- ...')
-                    break
-                    i+=1
-            print('\t-----\n')
+                i+=1
+            print('\t-----')
+            print("\tHamiltonian  : {}\n".format(H))
+            if self._State:
+                print("Defined States :")
+                i = 0
+                for st in self._State:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            if self._function:
+                print("Defined Functions :")
+                i = 0
+                for st in self._function:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            if self.saver.is_exist('data'):
+                i = 0
+                print("Stored Data :")
+                for st in self.saver['data']:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            #return self._tree
+        #def fset(self, value):
+        #    self._tree = value
+        #def fdel(self):
+        #    del self._tree
+        return locals()
 
+    tree = property(**tree())
+    """Short summary of current system.
+
+    Returns
+    -------
+    ``None``
+        No return value, but this property will print summary of this systme onto console.
+
+
+    .. note::
+        If you run :py:meth:`xxzchain.core.System.initialize`, you will see output of this property.
+    """
 
     @property
     def path(self): return self.__path
@@ -187,117 +208,71 @@ class System:
             print("\t|- No symmetry applied")
         print("\t---")
 
-    '''@symmetry.setter
-    def symmetry(self, value):
-        def commute(self):
-            if self.__symmetry[0] and self.__symmetry[3]:
-                warnings.warn("Spin number conserving and Spin inversion dosen't commute.")
-            elif self.__symmetry[1] and self.__symmetry[2]:
-                warnings.warn("Translation and Parity dosen't commute.")
-            return
-        if self.__initialized:
-            print("System already initialized.")
-        else:
-            if type(value) == str:
-
-                if not ( value[0] == '+' or value[0] =='-'):
-                    temp = np.array([False,False,False,False])
-                    for i in value:
-                        ch = 'QKPF'.find(i.upper())
-                        if not ch<0:
-                            temp[ch] = True
-                        else:
-                            raise KeyError("Unknown property : {}".format(i))
-                    self.__symmetry = temp
-                    self.symmetry
-                    return commute(self)
-                else:
-                    temp = self.__symmetry.copy()
-                    sign = value[0]
-                    value = value[1:]
-                    while value:
-                        ch = 'QKPF'.find(value[0].upper())
-                        if not ch<0:
-                            if sign == "+":
-                                temp[ch] = True
-                                value = value[1:]
-                            else:
-                                temp[ch] = False
-                                value = value[1:]
-                        elif value[0] == '+' or value[0] =='-':
-                            sign = value[0]
-                            value = value[1:]
-                        else:
-                            raise KeyError("Unknown property : {}".format(value[0]))
-
-                    self.__symmetry = temp
-                    self.symmetry
-                    return commute(self)
-            elif len(value) == 4:
-                temp = np.array(value).astype(np.bool)
-                self.__symmetry = temp
-                self.symmetry
-                return commute(self)
-            else:
-                raise ValueError("Can't set symmetry. Please read doc of symmetry")'''
-
-
-
     ###############################################################################################
 
     ############# Hamiltonian     ##############
-    @property
-    def Hamiltonian(self):
-        return self.__H
-    @Hamiltonian.setter
-    def Hamiltonian(self, name):
-        if name is None:
-            self.__H = None
-            return
-        for op in self._Operator:
-            if op == name:
-                self.__H = name
-                return
-            elif self._Operator[op] == name:
-                self.__H = op
-                return
-        if type(name) == Operator:
-            if name.name is None:
-                name.set_name('Hamiltonian')
-                self.__H = 'Hamiltonian'
-                return
-            else:
-                self.__H = name.name
-                return
-        print("Cannot find Operator ({})".format(name))
-        return
-    @Hamiltonian.getter
-    def Hamiltonian(self):
-        if self.__H is None:
-            return None
-        if self.__H in self._Operator:
-            return self._Operator[self.__H]
-        elif len(self.__H.split("."))>1:
-            return self._Operator[self.__H.split(".")[0]][".".join(self.__H.split(".")[1:])]
+    def Hamiltonian():
+        #doc = "The Hamiltonian property."
+        def fget(self):
+            if self.__H is None:
+                return None
+            if self.__H in self._Operator:
+                return self._Operator[self.__H]
+            elif len(self.__H.split("."))>1:
+                return self._Operator[self.__H.split(".")[0]][".".join(self.__H.split(".")[1:])]
 
+        def fset(self, name):
+            if name is None:
+                self.__H = None
+                return
+            for op in self._Operator:
+                if op == name:
+                    self.__H = name
+                    return
+                elif self._Operator[op] == name:
+                    self.__H = op
+                    return
+            if type(name) == Operator:
+                if name.name is None:
+                    name.set_name('Hamiltonian')
+                    self.__H = 'Hamiltonian'
+                    return
+                else:
+                    self.__H = name.name
+                    return
+            print("Cannot find Operator ({})".format(name))
+            return
+        def fdel(self):
+            del self._Hamiltonian
+        return locals()
+    Hamiltonian = property(**Hamiltonian())
 
 
 
     ############# initializer  ###############           will be modified
     def initialize(self, path = None, force = False):
-        """Short summary.
+        """Specific initializing method of this object.
 
         Parameters
         ----------
-        path : type
-            Description of parameter `path`.
-        force : type
-            Description of parameter `force`.
+        path : ``str``
+            The path that current system will be saved on.
+        force : ``bool``
+            If ``force`` == ``True``, system will ignore ``FileExistsError``.
 
         Returns
         -------
-        type
-            Description of returned object.
+        ``None``
+            This method doesn't return anything.
+
+
+        Our system use I/O system with HDF5 File Format to save calculation enviroment.
+        every progress will be saved on ``path``(i.e. Basis, Operator, State).
+
+        .. note::
+            If ``force`` argument is ``False`` and there is hdf5 file made by system earlier, this method will ask whether load that file or not.
+            If you answer 'yes', this method will be equivalent to :py:func:`xxzchain.lib.load_system`.
+
 
         """
         #'''this method calculate of whole sector by given method.
@@ -381,8 +356,22 @@ class System:
 
     ####################### save ###################
     def save(self, name = None, data_array = None):
-        '''this method save your system into given path.
-        it will contain operator and state.'''
+        """Save system or specific data into file.
+
+        Parameters
+        ----------
+        name : ``str``
+            Name of data which will be saved. After save data, you can access data with this name.
+        data_array : array-like object
+            Data which will be saved.
+
+        Returns
+        -------
+        ``None``
+            This method doesn't have return value.
+
+        """
+
             #self.checkfiles = path+'checkfiles'
             ########check files
 
@@ -406,24 +395,52 @@ class System:
         self.saver.flush()
 
     def plot(self, data_path, *arg,**kwarg):
+        """Plotting method for saved data. (*experimental*)
+
+        Parameters
+        ----------
+        data_path : ``str``
+            Name of data which you want to plot.
+        *arg, **kwarg :
+            Same ``arg`` and ``kwarg`` with matplotlib.pyplot.plot_.
+
+
+        .. seealso::
+            This method is using matplotlib.pyplot.plot_. If you need more detail for plotting, See reference.
+
+
+        .. _matplotlib.pyplot.plot: https://matplotlib.org/api/_as_gen/matplotlib.pyplot.plot.html#matplotlib.pyplot.plot
+        """
         if self.saver.is_exist('data/'+data_path):
             plt.plot(self.saver['data/'+data_path],*arg,**kwarg)
         if self.saver.is_exist(data_path):
             plt.plot(self.saver[data_path],*arg,**kwarg)
 
     def delete(self, name, force =False):
+        """Delete saved data.
+
+        Parameters
+        ----------
+        name : ``str``
+            `name` of data which you want to delete.
+        force : `boolean`
+            If ``Ture``, method will delete data without asking.
+
+        Raises
+        -------
+        ``KeyError``
+            If the data which is given name doesn't exist.
+        """
         '''this method delete your system that has been saved.
         PLEASE TAKE CARE FOR USING THIS METHOD.'''
-        if not self.saver.is_exist(name) and not self.saver.is_exist('data/'+name):
+        if not self.saver.is_exist('data/'+name):
             raise KeyError(str(name))
         if not force:
             y = input("'{}' will be removed on disk. Continue?[Y/n] : ".format(name))
             if len(y)==0 or not y.upper()=='Y':
                 print("Delete cancelled")
                 return
-        s = self.saver['data']
-        del s[name]
-
+        del self.saver.file['data/{}'.foramt(name)]
         return
 
     def __del__(self):
@@ -433,8 +450,25 @@ class System:
         return
 
     def load(self, path, print_tree= True):
-        '''Please indicate system saved folder. return is system object.
-        Recommended way is use of 'load_system(path)'  '''
+        """Load system object from ``.hdf5``(experimental).
+
+        Parameters
+        ----------
+        path : `string`
+            The File to read. Unfortunately, file-like object is not supported.
+        print_tree : `bool, optional`
+            Skipping show tree when the system loaded. If you try to load multiple system,
+            tree will make bunch of text.
+
+        Raises
+        -------
+        IOError
+            If the input file path does not valid, or cannot be read.
+
+
+        This method is not convenient to load system. We recommend using :py:func:`xxzchain.lib.load_system`
+        """
+
 
         ########check files
         self.saver.open(path)
@@ -480,7 +514,15 @@ class System:
     ################# basis ################
     @validation
     def get_full_sector(self):
-        '''Access full sector of this system.'''
+        """Access to full sector of this system..
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Basis`
+            Basis object of full Hilbert space.
+
+        """
+
         basis = Basis(self)
         state = np.arange(self.max)
         address = {i:i for i in state}
@@ -502,11 +544,11 @@ class System:
     def get_basis(self, *arg, **kwarg):
         '''access to specific basis. return is basis object.
         if cannot find sector, then system will calculate.
-        positional argument : eigenvalues in order of (Q, K, F, P)
-        keywork argument    : Q = q, K = k, F = f, P = p'''
+        positional argument : eigenvalues in order of (N, K, P, X)
+        keywork argument    : N = n, K = k, P = p, X = x'''
         if len(arg)>4 or len(kwarg)>4: raise KeyError("argument number is allowed only under 4.")
         null = (-1,-1,0,0)
-        symbol = 'QKFP'
+        symbol = 'NKPX'
         ### Follow symmetry order QKFP and make symmetry tuple
         if len(kwarg)==0 and len(arg) == 0:
             return self.get_full_sector()
@@ -529,13 +571,13 @@ class System:
 
         #symmetry condtion check
         if symmetry[0]>self.size or symmetry[0]<-1:
-            raise IndexError("given Q = {} is out of bounds for current system size {}.".format(symmetry[0],self.size))
+            raise IndexError("given N = {} is out of bounds for current system size {}.".format(symmetry[0],self.size))
         if symmetry[1]>self.size or symmetry[1]<-1:
             raise IndexError("given K = {} is out of bounds for current system size {}.".format(symmetry[1],self.size))
         if symmetry[2]>1 or symmetry[2]<-1:
-            raise IndexError("given F = {} is out of bounds for eigenvalue of spin inversion.".format(symmetry[2]))
+            raise IndexError("given P = {} is out of bounds for eigenvalue of spin inversion.".format(symmetry[2]))
         if symmetry[3]>1 or symmetry[3]<-1:
-            raise IndexError("given P = {} is out of bounds for eigenvalue of parity.".format(symmetry[3]))
+            raise IndexError("given X = {} is out of bounds for eigenvalue of parity.".format(symmetry[3]))
 
         basis = Basis(self, *symmetry)
         if not self.saver.is_exist('basis/({},{},{},{})'.format(*symmetry)):
@@ -660,7 +702,7 @@ class Subsystem(System):
 
 class Basis:
     '''Class 'basis' for Hilbert space sector of system.'''
-    def __init__(self, system, Q=None, K=None, F = None, P = None, symmetry = None):
+    def __init__(self, system, N=None, K=None, P = None, X = None, symmetry = None):
         '''make instance of basis that hold given symmetry'''
 
         #dependency
@@ -672,24 +714,24 @@ class Basis:
         if not (symmetry is None):
             if len(symmetry) == 4:
                 self.symmetry = np.array(symmetry)
-                Qp, Kp,Fp,Pp = self.symmetry
+                Np, Kp,Pp,Xp = self.symmetry
             else:
                 raise KeyError("Symmetry is ambiguous. symmetry must have 4 component")
         else:
-            Qp = -1 if Q is None else Q
+            Np = -1 if N is None else N
             Kp = -1 if K is None else K
             Pp = 0 if P is None else P
-            Fp = 0 if F is None else F
-            self.symmetry = np.array([Qp,Kp,Fp,Pp], dtype = np.int8)
+            Xp = 0 if X is None else X
+            self.symmetry = np.array([Qp,Kp,Pp,Xp], dtype = np.int8)
 
-        self.Q, self.K, self.F, self.P = self.symmetry
+        self.N, self.K, self.P, self.X = self.symmetry
         self.__eigen = False
         self.temp = np.zeros([self.size],dtype = np.int8)
         self.__state, self.__address, self.__period, self.__counts = None,None,None,None
         self.data = None
         self.Pd_bar, self.Fd_bar = None, None
 
-        self.path = "basis/({},{},{},{})".format(Qp,Kp,Pp,Fp)
+        self.path = "basis/({},{},{},{})".format(Np,Kp,Pp,Xp)
         self.find = np.vectorize(self._find)
         self.distance = np.vectorize(self.distance)
         self.period = np.vectorize(self._period)
@@ -705,7 +747,7 @@ class Basis:
         if (self.symmetry==[-1,-1,0,0]).all():
             rep =  "<Full basis of lattice size {}".format(self.size)
         else:
-            rep = "<Basis sector of lattice size {} with symmetry factor(Q,K,F,P) = ({},{},{},{})".format(self.system.size, *self.symmetry)
+            rep = "<Basis sector of lattice size {} with symmetry factor(N,K,P,X) = ({},{},{},{})".format(self.system.size, *self.symmetry)
 
         rep+='>'
         return rep
@@ -797,10 +839,10 @@ class Basis:
             if x in self.Pd_bar:
                 coef *=-1
 
-        if self.F == -1:
-            if self.Fd_bar is None:
-                self.Fd_bar = {i:True for i in self.data['Fd_bar'][:]}
-            if x in self.Fd_bar:
+        if self.X == -1:
+            if self.Xd_bar is None:
+                self.Xd_bar = {i:True for i in self.data['Xd_bar'][:]}
+            if x in self.Xd_bar:
                 coef *= -1
         return address, coef
 
@@ -844,9 +886,9 @@ class Basis:
                     string +="{0:b}  ".format(i).zfill(self.system.size)
                 print(s,string)
 
-    def load(self, Q,K,F,P):
+    def load(self, N,K,P,X):
         '''load from hdf5 based on given symmetry factor.'''
-        self.data = self.system.saver.get('basis/({},{},{},{})'.format(Q,K,F,P))
+        self.data = self.system.saver.get('basis/({},{},{},{})'.format(N,K,P,X))
         self.__state = self.data['state'][:]
         self.__address = { key:val for key, val in self.data['address'][:]}
         self.__period = self.data['period'][:]
@@ -1848,7 +1890,7 @@ class Initializer:
         self.system = system
         self.translate = np.vectorize(self._rtranslate)
         self.null = (-1,-1,0,0)
-        self.init = [self.Q, self.K, self.F,self.P]
+        self.init = [self.N, self.K, self.P,self.X]
         self.Plist = []
         self.__l, self.__r = int((self.system.size)/16), self.system.size%16
         for i in range(1<<16):
@@ -1873,7 +1915,7 @@ class Initializer:
         #elif not self.system.saver.is_exist('/basis/({},{},{},{})'.format(symmetry[:3], *self.null[3:])):
 
 
-    def Q(self, basis):
+    def N(self, basis):
         '''Initializer which find all small sector based on spin conservation.'''
         target = basis.state
         symmetry = basis.symmetry.copy()
@@ -1888,25 +1930,25 @@ class Initializer:
             address.append({})
             period.append([])
             counts[i] = 0
-        Q = self._npar_num(target)
+        N = self._npar_num(target)
         if symmetry[1] == -1:
-            for q,s in zip(Q,target):
-                state[q].append(s)
-                address[q][s] = counts[q]
-                counts[q]+=1
+            for n,s in zip(N,target):
+                state[n].append(s)
+                address[n][s] = counts[n]
+                counts[n]+=1
         else:
             raise SystemError("if this error occur then must debug")
 
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
-        for q in range(self.system.size+1):
-            assert len(state[q]) == counts[q], 'component and its label unmatched'
-            symmetry[0] = q
+        for n in range(self.system.size+1):
+            assert len(state[n]) == counts[n], 'component and its label unmatched'
+            symmetry[0] = n
             folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-            folder.create_dataset('state',data = np.array(state[q]),compression = 'lzf')
-            folder.create_dataset('address',data = np.array(list(address[q].items())),compression = 'lzf')
-            folder.create_dataset('period',data = np.array(period[q]),compression = 'lzf')
-            folder.attrs['counts'] = counts[q]
+            folder.create_dataset('state',data = np.array(state[n]),compression = 'lzf')
+            folder.create_dataset('address',data = np.array(list(address[n].items())),compression = 'lzf')
+            folder.create_dataset('period',data = np.array(period[n]),compression = 'lzf')
+            folder.attrs['counts'] = counts[n]
 
 
 
@@ -2006,7 +2048,7 @@ class Initializer:
                 folder['distance'] = ds
             folder.attrs['counts'] = counts[k]
 
-    def F(self, basis):
+    def X(self, basis):
         '''initializer for spin inversion symmetry'''
         full = self.system.max - 1
         target = basis.state
@@ -2093,7 +2135,7 @@ class Initializer:
 
         folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
         folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
-        folder_.create_dataset('Fd_bar',data = np.array(d_bar),compression = 'lzf')
+        folder_.create_dataset('Xd_bar',data = np.array(d_bar),compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
             folder.create_dataset('state_set',data = states, compression = 'lzf')
