@@ -46,13 +46,7 @@ class System:
         Equivalent to ``range(size)``.
     Odtype : ``np.complex128``
         Data type of operator's elements.
-    Hamiltonian : :py:class:`xxzchian.core.Operator`
-        Hamiltonian operator of this system. Only operator which is defined on this system can be Hamiltonian.
 
-
-    .. note::
-        :py:attr:`xxzchain.core.Basis.energy` and :py:meth:`xxzchain.core.State.time_evolving` or
-        :py:meth:`xxzchain.core.State.time_evolving_states` will be affected by this property.
     """
     #'''A environment object of quantum calculation.
 #
@@ -164,11 +158,6 @@ class System:
     tree = property(**tree())
     """Short summary of current system.
 
-    Returns
-    -------
-    ``None``
-        No return value, but this property will print summary of this systme onto console.
-
 
     .. note::
         If you run :py:meth:`xxzchain.core.System.initialize`, you will see output of this property.
@@ -246,7 +235,16 @@ class System:
             del self._Hamiltonian
         return locals()
     Hamiltonian = property(**Hamiltonian())
+    """
+    Hamiltonian operator of this system. Only operator which is defined on this system can be Hamiltonian.
 
+    :type: :py:class:`xxzchian.core.Operator`
+
+
+
+    .. note::
+        :py:attr:`xxzchain.core.Basis.energy` and :py:meth:`xxzchain.core.State.time_evolving` or
+        :py:meth:`xxzchain.core.State.time_evolving_states` will be affected by this property."""
 
 
     ############# initializer  ###############           will be modified
@@ -260,14 +258,9 @@ class System:
         force : ``bool``
             If ``force`` == ``True``, system will ignore ``FileExistsError``.
 
-        Returns
-        -------
-        ``None``
-            This method doesn't return anything.
-
 
         Our system use I/O system with HDF5 File Format to save calculation enviroment.
-        every progress will be saved on ``path``(i.e. Basis, Operator, State).
+        every progress will be saved on ``path`` (i.e. Basis, Operator, State).
 
         .. note::
             If ``force`` argument is ``False`` and there is hdf5 file made by system earlier, this method will ask whether load that file or not.
@@ -365,10 +358,6 @@ class System:
         data_array : array-like object
             Data which will be saved.
 
-        Returns
-        -------
-        ``None``
-            This method doesn't have return value.
 
         """
 
@@ -401,7 +390,7 @@ class System:
         ----------
         data_path : ``str``
             Name of data which you want to plot.
-        *arg, **kwarg :
+        ``*`` arg, ``**`` kwarg :
             Same ``arg`` and ``kwarg`` with matplotlib.pyplot.plot_.
 
 
@@ -410,6 +399,7 @@ class System:
 
 
         .. _matplotlib.pyplot.plot: https://matplotlib.org/api/_as_gen/matplotlib.pyplot.plot.html#matplotlib.pyplot.plot
+
         """
         if self.saver.is_exist('data/'+data_path):
             plt.plot(self.saver['data/'+data_path],*arg,**kwarg)
@@ -450,7 +440,7 @@ class System:
         return
 
     def load(self, path, print_tree= True):
-        """Load system object from ``.hdf5``(experimental).
+        """Load system object from ``.hdf5`` (experimental).
 
         Parameters
         ----------
@@ -512,7 +502,7 @@ class System:
 
 
     ################# basis ################
-    @validation
+    #@validation
     def get_full_sector(self):
         """Access to full sector of this system..
 
@@ -540,12 +530,43 @@ class System:
         else:
             raise ValueError("There is no basis referenced.")
 
-    @validation
+    #@validation
     def get_basis(self, *arg, **kwarg):
-        '''access to specific basis. return is basis object.
-        if cannot find sector, then system will calculate.
-        positional argument : eigenvalues in order of (N, K, P, X)
-        keywork argument    : N = n, K = k, P = p, X = x'''
+        """Get basis of given simultaneous eigenvalue sector.
+
+        Parameters
+        ----------
+        *arg : ``Integer``
+            Simultaneous eigenvalues of basis which you want to get in order (N[, K[, P[, X]]]).
+        **kwarg : 'key( ``Operator`` ) = value( ``eigenvalue`` )'
+            Specific kind of eigenvalues.
+
+            i.e.)
+                ``get_basis(N = 1)``, ``get_basis(n = 1, k = 0)``, ``get_basis(k = 0, p = 1)``
+
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Basis`
+            Basis object to manage specific Hilbert space sector.
+
+
+        .. note::
+            This method automatically search basis within data.
+            if given sector is not found, then system will calculate.
+
+            positional argument : eigenvalues in order of (N, K, P, X)
+
+            keywork argument    : N = n, K = k, P = p, X = x (small and capital letter can be used for identifying each eigenvale.)
+
+        """
+
+
+
+
+        #validation
+        if not arg[0].valid():  return print("Current system is empty or currupted. Please initialize or load first.")
+
         if len(arg)>4 or len(kwarg)>4: raise KeyError("argument number is allowed only under 4.")
         null = (-1,-1,0,0)
         symbol = 'NKPX'
@@ -598,25 +619,92 @@ class System:
 
 
     def print_spin(self, value):
-        '''print spinstate with 0(null site),1(particle site) of give integer format state.'''
+        """Print spin-configuration to binary representation.
+
+        Parameters
+        ----------
+        value : ``Integer``
+            Representation of spin-configuration.
+
+
+
+        This method will print spinstate with 0(null site, down-spin),1(particle site, up-spin) of give integer format state onto console.
+        If you put vanishing state as argument, method will print 'Vanishing'
+        """
         try:
             print("{0:b}".format(value).zfill(self.size))
         except:
             print("Vanishing")
 
     def get_operator(self, op_name):
-        '''Access to operator with operators name.
-        before that, the operator name set on system.
-        if not, it will occur KeyError.'''
+        """Getting operator with its name.
+
+        Parameters
+        ----------
+        op_name : ``str``
+            Operator's name that you've set. You can find list of operator with :py:meth:`xxzchain.core.System.operator_list`.
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Operator`
+            The operator which is named as ``st_name``.
+
+        Raises
+        -------
+        KeyError
+            If there is no operator that has name as ``op_name``.
+
+
+        .. warning::
+            To access to operator with operators name. before that, the operator name must be set on system.
+        """
+
         return self._Operator[op_name]
 
     def get_data(self, key):
+        """Getting data with its key.
+
+        Parameters
+        ----------
+        key : ``str``
+            Data's name when you save it.
+
+        Returns
+        -------
+        ``np.ndarray``
+            Data which is named as ``key``.
+
+        Raises
+        -------
+        KeyError
+            If there is no data that has name as ``key``.
+
+        """
         if self.saver.is_exist('data/'+str(key)):
             return self.saver.get('data/'+str(key))[:]
         else:
             raise KeyError(key)
 
     def get_function(self, key):
+        """Getting python function with its key.
+
+        Parameters
+        ----------
+        key : ``str`` or ``Integer``
+            Function's name when you save it.
+            Or, order of saving.
+
+        Returns
+        -------
+        function
+            Python function object will be returned.
+
+        Raises
+        -------
+        KeyError
+            If there is no function that has name as ``key``. Or, out of index.
+
+        """
         if isinstance(key, int):
             loader = self.saver['function']
             for function in loader:
@@ -626,6 +714,26 @@ class System:
         return self._function[key]
 
     def get_function_script(self, key):
+        """Getting python function script with its key.
+
+        Parameters
+        ----------
+        key : ``str`` or ``Integer``
+            Function's name when you save it.
+            Or, order of saving.
+
+        Returns
+        -------
+        ``str``
+            Function's source script.
+
+
+        Raises
+        -------
+        KeyError
+            If there is no function that has name as ``key``. Or, out of index.
+
+        """
         loader = self.saver['function']
         if isinstance(key, int):
 
@@ -642,7 +750,19 @@ class System:
 
 
     ##################### no ues ##########################
-    def load_operators(self, op_name_list=None, obj = None):
+    def load_operators_to_var(self, op_name_list=None, obj = None):
+        """Stack given operators to namespace(variables).
+
+        Parameters
+        ----------
+        op_name_list : list of ``str``
+            The name list of operator which you want to load.
+        obj : ``dict``
+            The namespace or dictionary-like object to define operators. Default value is `globals()`
+
+
+        """
+
         if op_name_list is None:
             op_name_list = list(self._Operator.keys())
         if obj is None:
@@ -656,24 +776,71 @@ class System:
                 print("'{}' is already defined on global variables".format(op))
 
     def get_state(self, st_name):
-        '''Access to state with given state name.
-        before that, the operator name set on system.
-        if not, it will occur KeyError.'''
+        """Getting operator with its name.
+
+        Parameters
+        ----------
+        st_name : ``str``
+            Name of state that you've set. You can find list of state with :py:meth:`xxzchain.core.System.state_list`.
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.State`
+            The state which is named as ``st_name``.
+
+        Raises
+        -------
+        KeyError
+            If there is no operator that has name as ``st_name``.
+
+
+        .. warning::
+            To access to state with its name, the state must have name on system.
+        """
         return self._State[st_name]
 
     def data_list(self):
-        '''print data list'''
+        """List of name of data which is stored.
+
+        Returns
+        -------
+        list
+            List of name of data.
+
+        """
         self.saver.ls('data',show_all=True)
 
     def operator_list(self):
-        '''retrun operator name list'''
+        """List of name of operator which is stored.
+
+        Returns
+        -------
+        list
+            List of name of operator.
+
+        """
         return list(self._Operator.keys())
 
-    def State_list(self):
-        '''return state name list'''
+    def state_list(self):
+        """List of name of state which is stored.
+
+        Returns
+        -------
+        list
+            List of name of state.
+
+        """
         return list(self._State.keys())
 
     def function_list(self):
+        """List of name of function stored.
+
+        Returns
+        -------
+        list
+            List of name of function.
+
+        """
         return list(self._function.keys())
 
 

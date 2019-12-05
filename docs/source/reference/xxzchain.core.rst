@@ -2,10 +2,6 @@ xxzchain.core package
 ========================
 
 
-.. toctree::
-    :caption: For developer :
-
-    internal
 
 .. contents::
   :depth: 2
@@ -29,6 +25,9 @@ xxzchain.core.System
     :members:
     :undoc-members:
     :special-members: Hamiltonian
+    :exclude-members: valid, validation, path, set_path, symmetry
+
+-----------------------------------
 
 xxzchain.core.Basis
 ~~~~~~~~~~~~~~~~~~~~
@@ -36,13 +35,24 @@ xxzchain.core.Basis
 .. autoclass:: xxzchain.core.Basis
     :members:
 
+-----------------------------------
+
 xxzchain.core.Operator
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: xxzchain.core.Operator
     :members:
 
+----------------------------------
+
 xxzchain.core.State
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: xxzchain.core.State
+
+
+.. developer session.
+.. toctree::
+    :caption: For developer :
+
+    internal
