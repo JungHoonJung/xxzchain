@@ -937,7 +937,7 @@ class Operator:
         doc = "The latex property."
         def fget(self):
             #self.system.display(Markdown('<font size ="4"> $$' + self._latex+'$$'))
-            #return self._latex
+            return self._latex
         def fset(self, value):
             self._latex = value
         def fdel(self):
