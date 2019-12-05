@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import math
 import inspect
 from copy import deepcopy
-from IPython.display import Markdown, display
+#from IPython.display import Markdown, display
 import h5py
 import warnings
 #from ..lib.devtool import OperatorGroup
@@ -76,7 +76,7 @@ class System:
         self.__symmetry = 'Q' # (spin conserving, traslational sym, parity, spin inversion)
 
         self.parent = None
-        self.display = display
+        #self.display = display
 
         #save/load & Initializer
         self.name = None
@@ -936,7 +936,7 @@ class Operator:
     def latex():
         doc = "The latex property."
         def fget(self):
-            self.system.display(Markdown('<font size ="4"> $$' + self._latex+'$$'))
+            #self.system.display(Markdown('<font size ="4"> $$' + self._latex+'$$'))
             #return self._latex
         def fset(self, value):
             self._latex = value
