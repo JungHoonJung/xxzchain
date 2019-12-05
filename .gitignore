@@ -100,5 +100,11 @@ venv.bak/
 # mkdocs documentation
 /site
 
+# corrent test files
+test*/
+test/
+test*
+
+
 # mypy
 .mypy_cache/
