@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+#lib/
 lib64/
 parts/
 sdist/
@@ -104,7 +104,7 @@ venv.bak/
 test*/
 test/
 test*
-
+Untitiled*
 
 # mypy
 .mypy_cache/
