@@ -24,7 +24,7 @@ copyright = '2019, Jung Hoon Jung'
 author = 'Jung Hoon Jung'
 
 # The short X.Y version
-version = ''
+version = '0.1'
 # The full version, including alpha/beta/rc tags
 release = '0.1'
 
