@@ -963,6 +963,16 @@ class Basis:
         self.__states = np.array(state)
 
 
+    def address():
+        #doc = "The address property."
+        def fget(self):
+            return self.__address
+        def fdel(self):
+            del self.__address
+        return locals()
+    address = property(**address())
+    """return address dict of this basis"""
+
     @property
     def state(self):
         return self.__state
@@ -993,7 +1003,6 @@ class Basis:
 
 
     def _find(self, state):
-        '''retrun address from state'''
         return self.__address.get(state,-1)
 
     def state_set(self, x):
@@ -1098,7 +1107,7 @@ class Basis:
 
             for rs in self.__state_set:
                 for s in self.__state_set[rs][1:]:
-                    self.__address[s] = rs
+                    self.__address[s] = self.__address[rs]
 
             self.__period = []
             for s,p in self.data['period'][:]:
@@ -2307,14 +2316,14 @@ class Initializer:
         full = self.system.max - 1
         target = basis.state
         symmetry = basis.symmetry.copy()
-        origin_address = basis.data['address']
+        #origin_address = basis.address
         logger = self.logger.getChild("X")
         if not (symmetry[0] == self.system.size/2 or symmetry[0]==-1): raise EnvironmentError("Spin conserving and spin inversion are not commute.")
         logger.info("Initializing spin inversion sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
 
         #calculate basis sector
-        s_state, s_address, s_period, s_counts = [],{},[],0
-        d_state, d_address, d_period, d_counts = [],{},[],0
+        s_state, s_address, s_period, s_counts = [],{},{},0
+        d_state, d_address, d_period, d_counts = [],{},{},0
         state_set = {}
         d_bar = []
         '''for i in range(2):
@@ -2325,7 +2334,7 @@ class Initializer:
 
         F = target^full
 
-
+        # WARNING:  must be check for period 4 in x and p
         if symmetry[1] == -1: # no momentum representative sector
             for f,s in zip(F,target):
                 if s<f:
@@ -2344,9 +2353,10 @@ class Initializer:
                 else:
                     logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
                     d_address[s] = d_address[f] #if f is not in d_address occur error
+                    #check representative which is not selected = d_bar
                     d_bar.append(s)
-            s_period = np.ones([len(s_state)], dtype = np.int32)
-            d_period = 2*np.ones([len(d_state)], dtype = np.int32)
+            s_period = {s_state[i] : 1 for i in range(len(s_state))}#np.ones([len(s_state)], dtype = np.int32)
+            d_period = {d_state[i] : 2 for i in range(len(d_state))}#2*np.ones([len(d_state)], dtype = np.int32)
         elif symmetry[1] == 0:
             distance = {}
             for f,s in zip(F,target):
@@ -2360,7 +2370,7 @@ class Initializer:
                         distance[comp] = basis.distance(comp)
                     s_counts +=1
                     state_set[s] = basis.state_set(s)
-                    s_period.append(basis.period(basis.find(s)))
+                    s_period[s] = basis.period(basis.find(s))
                 elif s<fs:
                     logger.debug("target : {}, flip : {}, selected doublet.".format(s,f))
                     d_state.append(s)
@@ -2369,7 +2379,7 @@ class Initializer:
                         d_address[comp] = d_counts
                         distance[comp] = basis.distance(comp)
                     d_counts +=1
-                    d_period.append(basis.period(basis.find(s))+basis.period(basis.find(fs)))
+                    d_period[s] = basis.period(basis.find(s))+basis.period(basis.find(fs))
                 else:
                     logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
                     for comp in basis.state_set(s):
@@ -2379,7 +2389,7 @@ class Initializer:
                         d_bar.append(comp)
         assert len(s_state) == s_counts
         assert len(d_state) == d_counts
-        states = -1*np.ones([s_counts+d_counts,self.system.size*2+1],np.int32)
+        states = -1*np.ones([s_counts+d_counts,self.system.size*4+1],np.int32)
         for i,key in enumerate(state_set):
             logger.debug("Family of '{}' :".format(key))
             states[i,0] = key
@@ -2390,6 +2400,12 @@ class Initializer:
 
         for key in d_address:
             s_address[key] = d_address[key]+s_counts
+
+        period = {}
+        for s in s_period:
+            period[s] = s_period[s]
+        for s in d_period:
+            period[s] = d_period[s]
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
         symmetry[3] = 1
@@ -2401,19 +2417,21 @@ class Initializer:
 
         folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
         folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
-
-        folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
-        folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
+        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        folder_['period'] = folder['period']
+        #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
+        #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
+        folder.create_dataset('state_set',data = states, compression = 'lzf')
+        folder_['state_set'] = folder['state_set']
 
         if symmetry[2]==-1:
-            folder_['Xd_bar'] = bsaver['({},{},{},{})/Fd_bar'.format(symmetry[0],symmetry[1],-1,0)]
-            folder['Xd_bar'] = bsaver['({},{},{},{})/Fd_bar'.format(symmetry[0],symmetry[1],-1,0)]
+            folder_['Pd_bar'] = bsaver['({},{},{},{})/Pd_bar'.format(symmetry[0],symmetry[1],-1,0)]
+            folder['Pd_bar'] = bsaver['({},{},{},{})/Pd_bar'.format(symmetry[0],symmetry[1],-1,0)]
         folder_.create_dataset('Xd_bar',data = np.array(d_bar),compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
-            folder.create_dataset('state_set',data = states, compression = 'lzf')
             folder_['distance'] = folder['distance']
-            folder_['state_set'] = folder['state_set']
+
         folder.attrs['counts'] = s_counts + d_counts
         folder_.attrs['counts'] = d_counts
 
@@ -2422,12 +2440,13 @@ class Initializer:
         full = self.system.max - 1
         target = basis.state
         symmetry = basis.symmetry.copy()
-        origin_address = basis.data['address']
+        logger = self.logger.getChild("P")
+        #origin_address = basis.data['address']
         if not (symmetry[1] == self.system.size/2 or symmetry[1]==-1 or symmetry[1]==0): raise EnvironmentError("Translation and parity are not commute.")
-        print("Initializing parity sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry),end = '\r')
+        logger.info("Initializing parity sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
         #calculate basis sector
-        s_state, s_address, s_period, s_counts = [],{},[],0
-        d_state, d_address, d_period, d_counts = [],{},[],0
+        s_state, s_address, s_period, s_counts = [],{},{},0
+        d_state, d_address, d_period, d_counts = [],{},{},0
         state_set = {}
         d_bar = []
         '''for i in range(2):
@@ -2445,12 +2464,12 @@ class Initializer:
                     d_state.append(s)
                     d_address[s] = d_counts
                     d_counts +=1
-                    d_period.append(2)
+                    d_period[s] = 2
                 elif s == f:
                     s_state.append(s)
                     s_address[s] = s_counts
                     s_counts +=1
-                    s_period.append(1)
+                    s_period[s] = 1
                 else:
                     d_address[s] = d_address[f]
                     d_bar.append(s)
@@ -2459,22 +2478,25 @@ class Initializer:
             for f,s in zip(F,target):
                 fs = basis.state[basis.find(f)]
                 if s == fs:
+                    logger.debug("target : {}, flip : {}({}), singlet.".format(s,f,fs))
                     s_state.append(s)
                     for comp in basis.state_set(s):
                         s_address[comp] = s_counts
                         distance[comp] = basis.distance(comp)
                     s_counts +=1
                     state_set[s] = basis.state_set(s)
-                    s_period.append(basis.period(basis.find(s)))
+                    s_period[s] = (basis.period(basis.find(s)))
                 elif s<fs:
+                    logger.debug("target : {}, flip : {}, selected doublet.".format(s,f))
                     d_state.append(s)
                     state_set[s] = list(basis.state_set(s))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_counts
                         distance[comp] = basis.distance(comp)
                     d_counts +=1
-                    d_period.append(basis.period(basis.find(s))+basis.period(basis.find(fs)))
+                    d_period[s] = (basis.period(basis.find(s))+basis.period(basis.find(fs)))
                 else:
+                    logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_address[fs]
                         distance[comp] = basis.distance(comp)
@@ -2482,7 +2504,7 @@ class Initializer:
                         d_bar.append(comp)
         assert len(s_state) == s_counts
         assert len(d_state) == d_counts
-        states = -1*np.ones([s_counts+d_counts,self.system.size*4+1],np.int32)
+        states = -1*np.ones([s_counts+d_counts,self.system.size*2+1],np.int32) #max period is 4L L from k, 2 from x and r respectively
         for i,key in enumerate(state_set):
             states[i,0] = key
             for j,value in enumerate(state_set[key]):
@@ -2490,6 +2512,12 @@ class Initializer:
 
         for key in d_address:
             s_address[key] = d_address[key]+s_counts
+
+        period = {}
+        for s in s_period:
+            period[s] = s_period[s]
+        for s in d_period:
+            period[s] = d_period[s]
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
         symmetry[2] = 1
@@ -2502,12 +2530,14 @@ class Initializer:
         folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
         folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
 
-        folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
-        folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
+        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        folder_['period'] = folder['period']
+        #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
+        #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
         folder_.create_dataset('Pd_bar',data = np.array(d_bar),compression = 'lzf')
+        folder.create_dataset('state_set',data = states, compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
-            folder.create_dataset('state_set',data = states, compression = 'lzf')
             folder_['distance'] = folder['distance']
             folder_['state_set'] = folder['state_set']
         folder.attrs['counts'] = s_counts + d_counts
