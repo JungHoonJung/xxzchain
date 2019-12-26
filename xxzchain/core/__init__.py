@@ -14,6 +14,8 @@ from copy import deepcopy
 import h5py
 import warnings
 import logging
+from numba import int32, jit, prange, vectorize, njit
+from numba.npyufunc.dufunc import DUFunc
 #from ..lib.devtool import OperatorGroup
 #import cupy as cp
 
@@ -1346,10 +1348,13 @@ class Operator:
         '''x is array of bitwise state(int type). return is another state(int type). default is Identity
         you can also implement of your own operator with keeping return format'''
         states = []
-        x=np.array(x)
+        x = np.array(x,dtype = np.int32)
         for i,op in enumerate(self.struct):
-            #op = np.vectorize(op)
-            states.append((op(x), self.__coef[i]))
+            if not isinstance(op,DUFunc):
+                self.struct[i] = vectorize([int32(int32)],target='parallel')(op)
+                states.append((self.struct[i](x), self.__coef[i]))
+            else:
+                states.append((op(x), self.__coef[i]))
         results = []
         for _ in range(len(x)):
             results.append({})
@@ -1658,7 +1663,9 @@ class Operator:
             l = len(other.struct)
             tl = len(self.struct) * l
             coef = np.zeros([tl],dtype = self.system.Odtype)
+
             def dec(a,b):
+                @vectorize([int32(int32)])
                 def wrap(x):
                     return a(b(x))
                 return wrap
@@ -1668,7 +1675,7 @@ class Operator:
                     la2, o_op = val2
                     coef[i*l+j] = self.coef[i]*other.coef[j]
                     label += la1+'@'+la2 +'+'
-                    func = np.vectorize(dec(my_op,o_op))
+                    func = dec(my_op,o_op)
                     struct.append(func)
             temp._label = label[:-1]
             temp._set_coef(coef)
@@ -1683,35 +1690,36 @@ class Operator:
 
 
     ########## state calculation ##########
-    #@np.vectorize                                # I
+    @njit(int32(int32))                               # I
     def identity(x):
         return x
 
-    #@np.vectorize                                # a
+    @njit(int32(int32, int32))#@np.vectorize                                # a
     def annihilation(x, i):
         if x == -1: return -1
         if (x>>i)&1:
             return x^(1<<i)
         return -1
 
-    #@np.vectorize                                # c
+    @njit(int32(int32, int32))#@np.vectorize                                # c
     def creation(x, i):
         if x == -1: return -1
         if not (x>>i)&1:
             return x^(1<<i)
         return -1
 
+    @njit(int32(int32, int32))
     def pauli_x(x,i):
         return x^(1<<i)
 
-    #@np.vectorize                                # n
+    @njit(int32(int32, int32))#@np.vectorize                                # n
     def n_i(x,i):
         if x == -1: return -1
         if (x>>i)&1:
             return x
         return -1
 
-    #@np.vectorize                                # h
+    @njit(int32(int32, int32, int32))#@np.vectorize                                # h
     def hopping(x,i,j):
         if x == -1: return -1
         m = (1<<i)|(1<<j)
@@ -1726,12 +1734,26 @@ class Operator:
         for a in arg:
             narg.append(a%self.system.size)
             label += "{}".format(a%self.system.size).zfill(2)
+        narg = np.array(narg,dtype = np.int32)
         temp = Operator(self.system)
         temp.set_default(False)
-        lambda x: self.acting(x,*narg)
-        def _index(x):
-            return self.acting(x,*narg)
-        temp.acting = np.vectorize(_index)
+        target = self.acting
+
+
+
+        if len(narg)==1:
+            @njit(int32(int32))
+            def _oneindex(x):
+                return target(x,narg[0])
+            _index = _oneindex
+        elif len(narg)==2:
+            @njit(int32(int32))
+            def _twoindex(x):
+                return target(x,narg[0],narg[1])
+            _index = _twoindex
+        else:
+            raise KeyError
+        temp.acting = _index
         temp._label = self._label+label
         temp.struct = [temp.acting]
         return temp
