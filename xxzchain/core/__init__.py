@@ -1943,6 +1943,20 @@ class State:
         if isinstance(other, Operator):
             return State(self.basis, (other.get_matrix(self.basis)@self.coef).T)
 
+    def entanglement_entropy_MSS(self, l):
+        if l > self.system.size or l<0: raise IndexError
+        elif l> self.system.size/2 : l = self.system.size - l
+        fullstate = np.zeros([2**self.system.size, len(self)],dtype = self.system.Odtype)
+        for i,state_coef in enumerate(self.__coef):
+            fullstate[self.basis.state_set(self.basis.state[i])] = state_coef/self.basis.period(i)
+        target = fullstate.T.reshape([len(self),-1,1<<l])
+        _,s, _ = np.linalg.svd(target, full_matrices = True)
+        ent = np.zeros([len(self)],dtype = np.float64)
+        for i,line in enumerate(s):
+            line = line[line!=0]
+            sks = np.power(line, 2)
+            ent[i] = (-sks*np.log(sks)).sum()
+        return ent
 
     def print_states(self, full_state = False, state_set = False):
         return self.basis.print_states(full_state, state_set)
