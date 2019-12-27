@@ -1351,8 +1351,9 @@ class Operator:
         x = np.array(x,dtype = np.int32)
         for i,op in enumerate(self.struct):
             if not isinstance(op,DUFunc):
-                self.struct[i] = vectorize([int32(int32)],target='parallel')(op)
+                self.struct[i] = vectorize([int32(int32)])(op)
                 states.append((self.struct[i](x), self.__coef[i]))
+                
             else:
                 states.append((op(x), self.__coef[i]))
         results = []
@@ -1481,12 +1482,12 @@ class Operator:
         list of :math:`\langle \psi | O\hat | \psi \rangle`
         '''
         if len(state) == 1:
-            return (state.dual()@ self.get_matrix(state.basis) @state.coef)
+            return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)[0]
         else:
-            return (state.dual()@ self.get_matrix(state.basis) @state.coef)[np.diag_indices(len(state))].copy()
+            return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)
 
     def act(self, state):
-        return self.get_matrix(state.basis) @ state.coef.T
+        return self.get_matrix(state.basis) @ state.coef
 
     def solve_on(self, basis, save = True):
         if self.name is None:

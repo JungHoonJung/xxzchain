@@ -6,7 +6,7 @@ setup(
     description      = 'Python Quantum spin chain ED library',
     python_requires  = '>=3.6',
     packages         = find_packages(),
-    install_requires = ['numpy>=1.16','matplotlib', 'h5py'],
+    install_requires = ['numpy>=1.16','matplotlib', 'h5py','numba'],
 
 
     author           = 'Jung Hoon Jung',
