@@ -1098,7 +1098,7 @@ class Basis:
     def load(self, N,K,P,X):
         '''load from hdf5 based on given symmetry factor.'''
         self.data = self.system.saver.get('basis/({},{},{},{})'.format(N,K,P,X))
-        self.__state = self.data['state'][:]
+        self.__state = self.data['state'][:].sort()
         self.__address = { val : i for i, val in enumerate(self.__state)}
         self.__period = self.data['period'][:]
         if not len(self.__period) == len(self.__state):
@@ -1353,7 +1353,7 @@ class Operator:
             if not isinstance(op,DUFunc):
                 self.struct[i] = vectorize([int32(int32)])(op)
                 states.append((self.struct[i](x), self.__coef[i]))
-                
+
             else:
                 states.append((op(x), self.__coef[i]))
         results = []
@@ -1903,7 +1903,7 @@ class State:
 
     def __repr__(self):
         rep = ''
-        rep += "'{}' state on sector {}\n".format(self.name, (self.basis.Q,self.basis.K))
+        rep += "'{}' state on sector {}\n".format(self.name, (self.basis.symmetry))
         rep += "t             : {}\n".format(self.time)
         if self.__e is not None:
             rep += "Energy        : {}\n".format(self.__e)
@@ -1967,11 +1967,16 @@ class State:
             return State(self.basis, (other.get_matrix(self.basis)@self.coef).T)
 
     def entanglement_entropy_MSS(self, l):
-        if l > self.system.size or l<0: raise IndexError
-        elif l> self.system.size/2 : l = self.system.size - l
+        if l > self.system.size or l<0 :
+            raise IndexError
+        elif l == 0 or l == self.system.size:
+            return np.zeros([len(self)])
+        elif l> self.system.size/2 :
+            l = self.system.size - l;
+
         fullstate = np.zeros([2**self.system.size, len(self)],dtype = self.system.Odtype)
         for i,state_coef in enumerate(self.__coef):
-            fullstate[self.basis.state_set(self.basis.state[i])] = state_coef/self.basis.period(i)
+            fullstate[self.basis.state_set(self.basis.state[i])] = state_coef/np.sqrt(self.basis.period(i))
         target = fullstate.T.reshape([len(self),-1,1<<l])
         _,s, _ = np.linalg.svd(target, full_matrices = True)
         ent = np.zeros([len(self)],dtype = np.float64)
