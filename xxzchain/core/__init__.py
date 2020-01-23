@@ -1098,7 +1098,8 @@ class Basis:
     def load(self, N,K,P,X):
         '''load from hdf5 based on given symmetry factor.'''
         self.data = self.system.saver.get('basis/({},{},{},{})'.format(N,K,P,X))
-        self.__state = self.data['state'][:].sort()
+        self.__state = self.data['state'][:]
+        #self.__state.sort()
         self.__address = { val : i for i, val in enumerate(self.__state)}
         self.__period = self.data['period'][:]
         if not len(self.__period) == len(self.__state):
@@ -1481,10 +1482,53 @@ class Operator:
 
         list of :math:`\langle \psi | O\hat | \psi \rangle`
         '''
-        if len(state) == 1:
-            return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)[0]
+        if state.computable:
+            if len(state) == 1:
+                return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)[0]
+            else:
+                return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)
         else:
-            return (state.coef.conjugate()*(self.get_matrix(state.basis)@state.coef)).sum(axis = 0)
+            # state.T@mat * state
+            dtype = self.system.Odtype
+            K = False
+            if not state.basis.K == -1:
+                K = True
+            temp = np.zeros([state.coef.conjugate().shape[0]],dtype = np.complex128)
+
+            for i, result in enumerate(self.acton(state.basis.state)):
+                '''origin = np.array([st for st in result if not st<0])
+                if len(origin)== 0 : continue
+
+                value = np.array([result[st] for st in result if not st<0])
+                target, coef = basis.convert(origin)
+
+                mask = (target>=0)
+                target = target[mask]
+                coef = coef[mask]
+                value = value[mask]
+                period = basis.period(target)
+
+                for st,c,v,p in zip(target,coef, value,period):
+                    matrix[st*matsize + i] += c*v*np.sqrt(basis.period(i)/p)'''
+
+                origin = np.array(list(result.items()))
+                if origin.shape[0]== 1 and origin[0][0] == -1: continue #continue only return is -1
+
+                #value = np.array([result[st] for st in result if not st<0])
+                target, coef = state.basis.convert(origin.T[0]) #convert key
+
+                mask = (target>=0)
+                #target = target[mask]
+                #coef = coef[mask]
+                #value = value[mask]
+                period = state.basis.period(target)
+                ip = state.basis.period(i)
+                for M,st,c,p,O in zip(mask, target, coef,  period, origin):
+                    if not M: continue
+                    o, v  = O
+                    temp[i]+=c*v*np.sqrt(ip/p)*state.coef.conjugate()[st]
+                    #matrix[st*matsize + i] += c*v*np.sqrt(ip/p)
+            return (temp*(state.coef).T).sum(axis = 1)[0]
 
     def act(self, state):
         return self.get_matrix(state.basis) @ state.coef
@@ -1722,6 +1766,7 @@ class Operator:
 
     @njit(int32(int32, int32, int32))#@np.vectorize                                # h
     def hopping(x,i,j):
+
         if x == -1: return -1
         m = (1<<i)|(1<<j)
         ch = m&x
@@ -1769,7 +1814,6 @@ class Operator:
 
 # In[23]:
 
-
 class State:
     path = '/state/'
     def __init__(self, basis, coef, eigen = False, name = None):
@@ -1777,6 +1821,11 @@ class State:
         self.system = basis.system
         self.basis = basis
         self.states = basis.state
+
+        self.computable = True
+        if len(self.basis)>30000:
+            self.computable = False
+
         self.__coef,self.__eigencoef = None,None
         self.__e = None
         if eigen:
@@ -1787,6 +1836,7 @@ class State:
         self.length = self.coef.shape[1] if len(self.coef.shape) != 1 else 1
         #self.times = {}
         self.name = None
+
         if name is not None:
             self.set_name(name)
         #assert len(coef) == len(basis.state)
@@ -1800,7 +1850,7 @@ class State:
         self.__coef = coef.astype(np.complex128)
         if len(self.__coef.shape) == 1:
             self.__coef = self.__coef.reshape(-1,1)
-        if self.system.Hamiltonian is not None:
+        if self.system.Hamiltonian is not None and self.computable:
             self.__eigencoef = self.system.Hamiltonian.get_eigenvectors(self.basis).conjugate().T@self.__coef
         return
 
@@ -1816,7 +1866,7 @@ class State:
     def energy(self):
         if self.system.Hamiltonian is None:
             raise EnvironmentError("Hamiltonian is None.")
-        if self.__e is None:
+        if self.__e is None and self.computable:
             self.__e = self.system.Hamiltonian.expectation(self)
         return self.__e
 
@@ -1831,13 +1881,14 @@ class State:
         self.__eigencoef = coef.astype(np.complex128)
         if len(self.__eigencoef.shape) == 1:
             self.__eigencoef = self.__eigencoef.reshape(-1,1)
-        self.__coef = self.system.Hamiltonian.get_eigenvectors(self.basis)@self.__eigencoef
+        if self.computable:
+            self.__coef = self.system.Hamiltonian.get_eigenvectors(self.basis)@self.__eigencoef
         return
     @eigencoef.getter
     def eigencoef(self):
         if self.system.Hamiltonian is None:
             raise EnvironmentError("Hamiltonian is None.")
-        if self.__eigencoef is None:
+        if self.__eigencoef is None and self.computable:
             self.__eigencoef = self.system.Hamiltonian.get_eigenvectors(self.basis).conjugate().T@self.__coef
         return self.__eigencoef
 
@@ -1851,7 +1902,7 @@ class State:
         return State(self.basis, self.__coef.T[key].copy())
 
     def update(self):
-        if self.system.Hamiltonian is None:
+        if self.system.Hamiltonian is None or not self.computable:
             raise EnvironmentError("Hamiltonian is None.")
         self.__eigencoef = self.system.Hamiltonian.get_eigenvectors(self.basis).conjugate().T@self.__coef
         self.__e = (self.system.Hamiltonian.get_eigenvalue(self.basis)*self.__eigencoef.T*self.__eigencoef.conjugate().T).sum(axis = 0)
@@ -1978,7 +2029,7 @@ class State:
         for i,state_coef in enumerate(self.__coef):
             fullstate[self.basis.state_set(self.basis.state[i])] = state_coef/np.sqrt(self.basis.period(i))
         target = fullstate.T.reshape([len(self),-1,1<<l])
-        _,s, _ = np.linalg.svd(target, full_matrices = True)
+        s = np.linalg.svd(target, full_matrices = True, compute_uv = False)
         ent = np.zeros([len(self)],dtype = np.float64)
         for i,line in enumerate(s):
             line = line[line!=0]
@@ -1990,6 +2041,66 @@ class State:
         return self.basis.print_states(full_state, state_set)
 
 
+    def LTS_time_evolving(self, epsilon = 0.1): #only for delta = 1/2, lambda  = 1/2 Hamiltonian
+        """Lie-Trotter-Suzuki approximation for unitary time evolution. this method will calculate epsilon for single state"""
+        assert len(self) == 1, "only single state can be evolving."
+        #assert end%epsilon == 0 , "the remain of divide end/epsilon is not zero."
+        H_0 = self.system.size//2+self.system.size%2 #odd
+        H_1 = self.system.size//2 #even
+        H_2 = self.system.size//4 + ((self.system.size%4)!=0)
+        H_3 = self.system.size//4 + ((self.system.size%4)==3)
+        init = self.coef
+        #print(H_0,H_1,H_2,H_3)
+        temp = init.copy()
+        L = self.system.size
+
+        for i in range(H_0):
+            temp = self.two_spin_rotation(temp,2*i,(2*i+1)%L,epsilon/4)
+
+        for i in range(H_1):
+            temp = self.two_spin_rotation(temp,2*i+1,(2*i+2)%L,epsilon/4)
+
+        for i in range(H_2):
+            temp = self.two_spin_rotation(temp,4*i,4*i+2,epsilon/4)
+            temp = self.two_spin_rotation(temp,4*i+1,(4*i+3)%L,epsilon/4)
+
+        for i in range(H_3):
+            temp = self.two_spin_rotation(temp,4*i+2,(4*i+4)%L,epsilon/2)
+            temp = self.two_spin_rotation(temp,4*i+3,(4*i+5)%L,epsilon/2)
+
+        for i in range(H_2):
+            temp = self.two_spin_rotation(temp,4*i,4*i+2,epsilon/4)
+            temp = self.two_spin_rotation(temp,4*i+1,(4*i+3)%L,epsilon/4)
+
+        for i in range(H_1):
+            temp = self.two_spin_rotation(temp,2*i+1,(2*i+2)%L,epsilon/4)
+
+        for i in range(H_0):
+            temp = self.two_spin_rotation(temp,2*i,(2*i+1)%L,epsilon/4)
+
+        return State(self.basis, temp.T)
+
+    def two_spin_rotation(self, coef, l,m,epsilon):
+        flip = spin_flip(self.basis.state, l, m)
+        fi,_ = self.basis.convert(flip)
+        new_s = np.zeros([len(self.basis),1], dtype = np.complex128)
+        new_s[flip==-1] = coef[flip==-1]*np.exp(1j*epsilon/4)
+
+        new_s[flip != -1] = coef[flip!=-1]*np.exp(-1j*epsilon/4)*np.cos(epsilon)
+        new_s[fi[flip!=-1]] += coef[flip!=-1]*1j*np.exp(-1j*epsilon/4)*np.sin(epsilon)
+        return new_s
+
+        '''for i,s in enumerate(self.basis.state):
+            flip = Operator.hopping(s,l,m)
+            fi = self.basis.find(flip)
+            if flip == -1:
+                new_s[s] = new_s.get(s,0) + state[s]*np.exp(1j*epsilon/4)
+            else:
+                new_s[s] = new_s.get(s,0) + state[s]*np.exp(-1j*epsilon/4)*np.cos(epsilon)
+                new_s[flip] = new_s.get(flip,0) + state[s]*1j*np.exp(-1j*epsilon/4)*np.sin(epsilon)
+        return new_s'''
+
+spin_flip  = np.vectorize(Operator.hopping)
 
 
 class Saver:
