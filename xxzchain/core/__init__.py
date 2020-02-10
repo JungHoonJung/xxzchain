@@ -13,19 +13,16 @@ from copy import deepcopy
 #from IPython.display import Markdown, display
 import h5py
 import warnings
+import logging
 #from ..lib.devtool import OperatorGroup
 #import cupy as cp
 
 
 ## In[2]:
-
+LogFormatter = logging.Formatter("%(asctime)s '%(name)-10s' : [%(levelname)8s] %(message)s (ln : %(lineno)4s)")
 
 class System:
-    """A environment object of calculation.
-
-    Please make sure your system's size and symmetry that you want to use.
-    Support 1 ~ 32 lattice size.
-    You can see the summery of your system through 'System.tree'
+    """A environment object of whole calculation.
 
     Parameters
     ----------
@@ -36,15 +33,20 @@ class System:
     dtype : ``np.dtype``
         Description of parameter `dtype`.
 
+
+    Please make sure your system's size that you want to use. Support 1 ~ 32 lattice size.
+    You can see the summery of your system through 'System.tree'.
+
+    .. note::
+        In many calculation, we represent spin configuration as binary.
+        Generally, 4bytes-integer(``int``) is consist of 32 bits. It's the reason why this package support system size below 32.
+
     Attributes
     ----------
-    range : type
-        Description of attribute `range`.
-    parent : type
-        Description of attribute `parent`.
-    Odtype : type
-        Description of attribute `Odtype`.
-
+    range : ``range`` (`built-in`)
+        Equivalent to ``range(size)``.
+    Odtype : ``np.complex128``
+        Data type of operator's elements.
 
     """
     #'''A environment object of quantum calculation.
@@ -55,11 +57,35 @@ class System:
 #    '''
 
 
-    def __init__(self, size, name = None, dtype = np.float64):
+    def __init__(self, size, name = None, dtype = np.float64,**kwarg):
         self.size = size
         self.max = 1<<size
         self.range = range(self.size)
+        self.name = None
+        if name is None:
+            self.name = "lattice{}".format(size)
         #self.sample = np.zeros([size],dtype =np.bool)
+
+        #Data types
+        self.dtype = dtype
+        self.Odtype = np.complex128
+
+        #logging
+        self.logger = logging.getLogger("System")
+        self.logger.setLevel(logging.WARNING)
+        self._logmode = 'warning'
+        for key in kwarg:
+            if key == 'log':
+                fileHandler = logging.FileHandler(kwarg[key])
+                fileHandler.setFormatter(LogFormatter)
+                self.logger.setLevel(logging.DEBUG)
+                self.logger.addHandler(fileHandler)
+                self._logmode = 'debug'
+                #logging.basicConfig(filename = kwarg[key], format='%(asctime)s %(name)-10s : [%(levelname)-8s]|ln : %(lineno)s > %(message)s', level = logging.DEBUG)
+                self.logger.info('System started. (size = {}, name = {}, dtype = {})'.format(self.size, self.name, self.dtype))
+            else:
+                KeyError("'{}'".format(key))
+
 
         #storage
         self.__basis = None
@@ -75,83 +101,88 @@ class System:
         self.__H = None
         self.__symmetry = 'Q' # (spin conserving, traslational sym, parity, spin inversion)
 
+        # TODO: for class 'Subsystem'
         self.parent = None
-        #self.display = display
 
         #save/load & Initializer
-        self.name = None
         self.saver = Saver(self)
         self.initializer = Initializer(self)
-        if name is None:
-            self.name = "lattice{}".format(size)
 
-        #Data types
-        self.dtype = dtype
-        self.Odtype = np.complex128
+
 
 
     ############      tree        ################
-    @property
-    def tree(self):
-        return
+    def tree():
+        #doc =
+        def fget(self):
+            if not self.__initialized:
+                print("System must be initialized. please make sure your path and file with 'initialize(path)'")
+                return
+            print("Hardcore boson system")
+            path = '-----' if self.path is None else os.path.abspath(self.path)
+            print("Name         : {}".format(self.name))
+            print("Saved path   : {}".format(path))
+            print("System size  : {}\n".format(self.size))
+            print("Referenced Basis :   (None means full)")
+            print('\t|- Sector {} '.format(self.__basis.symmetry))
+            print('\t-----\n')
 
-    #print summery of system, return is None
-    @tree.getter
-    def tree(self):
-        if not self.__initialized:
-            print("System must be initialized. please make sure your path and file with 'initialize(path)'")
-        print("Hardcore boson system")
-        path = '-----' if self.path is None else os.path.abspath(self.path)
-        print("Name         : {}".format(self.name))
-        print("Saved path   : {}".format(path))
-        print("System size  : {}\n".format(self.size))
-        print("Referenced Basis :   (None means full)")
-        print('\t|- Sector {} '.format(self.__basis.symmetry))
-        print('\t-----\n')
+            H = '-----' if self.__H is None else "'{}'".format(self.__H)
 
-        H = '-----' if self.__H is None else "'{}'".format(self.__H)
-
-        print("Defined Operators :")
-        i = 0
-        for op in self._Operator:
-            print('\t|- {}'.format(op))
-            if i>5:
-                print('\t|- ...')
-                break
-            i+=1
-        print('\t-----')
-        print("\tHamiltonian  : {}\n".format(H))
-        if self._State:
-            print("Defined States :")
+            print("Defined Operators :")
             i = 0
-            for st in self._State:
-                print('\t|- {}'.format(st))
+            for op in self._Operator:
+                print('\t|- {}'.format(op))
                 if i>5:
                     print('\t|- ...')
                     break
-                    i+=1
-            print('\t-----\n')
-        if self._function:
-            print("Defined Functions :")
-            i = 0
-            for st in self._function:
-                print('\t|- {}'.format(st))
-                if i>5:
-                    print('\t|- ...')
-                    break
-                    i+=1
-            print('\t-----\n')
-        if self.saver.is_exist('data'):
-            i = 0
-            print("Stored Data :")
-            for st in self.saver['data']:
-                print('\t|- {}'.format(st))
-                if i>5:
-                    print('\t|- ...')
-                    break
-                    i+=1
-            print('\t-----\n')
+                i+=1
+            print('\t-----')
+            print("\tHamiltonian  : {}\n".format(H))
+            if self._State:
+                print("Defined States :")
+                i = 0
+                for st in self._State:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            if self._function:
+                print("Defined Functions :")
+                i = 0
+                for st in self._function:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            if self.saver.is_exist('data'):
+                i = 0
+                print("Stored Data :")
+                for st in self.saver['data']:
+                    print('\t|- {}'.format(st))
+                    if i>5:
+                        print('\t|- ...')
+                        break
+                        i+=1
+                print('\t-----\n')
+            #return self._tree
+        #def fset(self, value):
+        #    self._tree = value
+        #def fdel(self):
+        #    del self._tree
+        return locals()
 
+    tree = property(**tree())
+    """Short summary of current system.
+
+
+    .. note::
+        If you run :py:meth:`xxzchain.core.System.initialize`, you will see output of this property.
+    """
 
     @property
     def path(self): return self.__path
@@ -187,117 +218,78 @@ class System:
             print("\t|- No symmetry applied")
         print("\t---")
 
-    '''@symmetry.setter
-    def symmetry(self, value):
-        def commute(self):
-            if self.__symmetry[0] and self.__symmetry[3]:
-                warnings.warn("Spin number conserving and Spin inversion dosen't commute.")
-            elif self.__symmetry[1] and self.__symmetry[2]:
-                warnings.warn("Translation and Parity dosen't commute.")
-            return
-        if self.__initialized:
-            print("System already initialized.")
-        else:
-            if type(value) == str:
-
-                if not ( value[0] == '+' or value[0] =='-'):
-                    temp = np.array([False,False,False,False])
-                    for i in value:
-                        ch = 'QKPF'.find(i.upper())
-                        if not ch<0:
-                            temp[ch] = True
-                        else:
-                            raise KeyError("Unknown property : {}".format(i))
-                    self.__symmetry = temp
-                    self.symmetry
-                    return commute(self)
-                else:
-                    temp = self.__symmetry.copy()
-                    sign = value[0]
-                    value = value[1:]
-                    while value:
-                        ch = 'QKPF'.find(value[0].upper())
-                        if not ch<0:
-                            if sign == "+":
-                                temp[ch] = True
-                                value = value[1:]
-                            else:
-                                temp[ch] = False
-                                value = value[1:]
-                        elif value[0] == '+' or value[0] =='-':
-                            sign = value[0]
-                            value = value[1:]
-                        else:
-                            raise KeyError("Unknown property : {}".format(value[0]))
-
-                    self.__symmetry = temp
-                    self.symmetry
-                    return commute(self)
-            elif len(value) == 4:
-                temp = np.array(value).astype(np.bool)
-                self.__symmetry = temp
-                self.symmetry
-                return commute(self)
-            else:
-                raise ValueError("Can't set symmetry. Please read doc of symmetry")'''
-
-
-
     ###############################################################################################
 
     ############# Hamiltonian     ##############
-    @property
-    def Hamiltonian(self):
-        return self.__H
-    @Hamiltonian.setter
-    def Hamiltonian(self, name):
-        if name is None:
-            self.__H = None
+    def Hamiltonian():
+        #doc = "The Hamiltonian property."
+        def fget(self):
+            if self.__H is None:
+                return None
+            if self.__H in self._Operator:
+                return self._Operator[self.__H]
+            elif len(self.__H.split("."))>1:
+                return self._Operator[self.__H.split(".")[0]][".".join(self.__H.split(".")[1:])]
+
+        def fset(self, name):
+            if name is None:
+                self.__H = None
+                return
+            for op in self._Operator:
+                if op == name:
+                    self.__H = name
+                    self.logger.debug("Hamiltonian set as '{}'".format(self.__H))
+                    return
+                elif self._Operator[op] == name:
+                    self.__H = op
+                    self.logger.debug("Hamiltonian set as '{}'".format(self.__H))
+                    return
+            if type(name) == Operator:
+                if name.name is None:
+                    name.set_name('Hamiltonian')
+                    self.__H = 'Hamiltonian'
+                    self.logger.debug("Hamiltonian set as '{}'".format(self.__H))
+                    return
+                else:
+                    self.logger.debug("Hamiltonian set as '{}'".format(self.__H))
+                    return
+            print("Cannot find Operator ({})".format(name))
             return
-        for op in self._Operator:
-            if op == name:
-                self.__H = name
-                return
-            elif self._Operator[op] == name:
-                self.__H = op
-                return
-        if type(name) == Operator:
-            if name.name is None:
-                name.set_name('Hamiltonian')
-                self.__H = 'Hamiltonian'
-                return
-            else:
-                self.__H = name.name
-                return
-        print("Cannot find Operator ({})".format(name))
-        return
-    @Hamiltonian.getter
-    def Hamiltonian(self):
-        if self.__H is None:
-            return None
-        if self.__H in self._Operator:
-            return self._Operator[self.__H]
-        elif len(self.__H.split("."))>1:
-            return self._Operator[self.__H.split(".")[0]][".".join(self.__H.split(".")[1:])]
+        def fdel(self):
+            del self._Hamiltonian
+        return locals()
+    Hamiltonian = property(**Hamiltonian())
+    """
+    Hamiltonian operator of this system. Only operator which is defined on this system can be Hamiltonian.
+
+    :type: :py:class:`xxzchian.core.Operator`
 
 
+
+    .. note::
+        :py:attr:`xxzchain.core.Basis.energy` and :py:meth:`xxzchain.core.State.time_evolving` or
+        :py:meth:`xxzchain.core.State.time_evolving_states` will be affected by this property."""
 
 
     ############# initializer  ###############           will be modified
     def initialize(self, path = None, force = False):
-        """Short summary.
+        """Specific initializing method of this object.
 
         Parameters
         ----------
-        path : type
-            Description of parameter `path`.
-        force : type
-            Description of parameter `force`.
+        path : ``str``
+            The path that current system will be saved on.
+        force : ``bool``
+            If ``force`` == ``True``, system will ignore ``FileExistsError``.
 
-        Returns
-        -------
-        type
-            Description of returned object.
+
+        Our system use I/O system with HDF5 File Format to save calculation enviroment.
+        every progress will be saved on ``path`` (i.e. Basis, Operator, State).
+
+        .. note::
+            If ``force`` argument is ``False`` and there is hdf5 file made by system earlier, this method will ask whether load that file or not.
+            If you answer 'yes', this method will be equivalent to :py:func:`xxzchain.lib.load_system`.
+
 
         """
         #'''this method calculate of whole sector by given method.
@@ -316,12 +308,12 @@ class System:
                 self.__path  = path
         if not self.__path[-1] =='/':
             self.__path = path+'/'
-            print('Current system saved at "{}"'.format(path))
+            self.logger.debug('Current system will be saved at "{}"'.format(path))
 
 
         if self.__initialized:
             if not force:
-                print("System already initialized!")
+                self.logger.warning("System already initialized!")
                 return
             else:
                 y = input("Previous progress will be lost. Continue?[Y/n] : ")
@@ -349,12 +341,13 @@ class System:
 
             self.saver.attrs['H'] = str(self.__H).encode()
             self.saver.file.create_group('basis')
+            self.logger.info("'{}' file created.".format(self.name+'.hdf5'))
 
         self.save()
         self.__initialized = True
         ## construct full sector
         basis  = self.get_full_sector()
-
+        self.logger.debug("full basis tested.")
         ## find basis sector by given symmetry
         #self.initializer.Q(basis)
         del basis
@@ -381,8 +374,18 @@ class System:
 
     ####################### save ###################
     def save(self, name = None, data_array = None):
-        '''this method save your system into given path.
-        it will contain operator and state.'''
+        """Save system or specific data into file.
+
+        Parameters
+        ----------
+        name : ``str``
+            Name of data which will be saved. After save data, you can access data with this name.
+        data_array : array-like object
+            Data which will be saved.
+
+
+        """
+
             #self.checkfiles = path+'checkfiles'
             ########check files
 
@@ -406,35 +409,84 @@ class System:
         self.saver.flush()
 
     def plot(self, data_path, *arg,**kwarg):
+        """Plotting method for saved data. (*experimental*)
+
+        Parameters
+        ----------
+        data_path : ``str``
+            Name of data which you want to plot.
+        ``*`` arg, ``**`` kwarg :
+            Same ``arg`` and ``kwarg`` with matplotlib.pyplot.plot_.
+
+
+        .. seealso::
+            This method is using matplotlib.pyplot.plot_. If you need more detail for plotting, See reference.
+
+
+        .. _matplotlib.pyplot.plot: https://matplotlib.org/api/_as_gen/matplotlib.pyplot.plot.html#matplotlib.pyplot.plot
+
+        """
         if self.saver.is_exist('data/'+data_path):
             plt.plot(self.saver['data/'+data_path],*arg,**kwarg)
         if self.saver.is_exist(data_path):
             plt.plot(self.saver[data_path],*arg,**kwarg)
 
     def delete(self, name, force =False):
+        """Delete saved data.
+
+        Parameters
+        ----------
+        name : ``str``
+            `name` of data which you want to delete.
+        force : `boolean`
+            If ``Ture``, method will delete data without asking.
+
+        Raises
+        -------
+        ``KeyError``
+            If the data which is given name doesn't exist.
+        """
         '''this method delete your system that has been saved.
         PLEASE TAKE CARE FOR USING THIS METHOD.'''
-        if not self.saver.is_exist(name) and not self.saver.is_exist('data/'+name):
+        if not self.saver.is_exist('data/'+name):
             raise KeyError(str(name))
         if not force:
             y = input("'{}' will be removed on disk. Continue?[Y/n] : ".format(name))
             if len(y)==0 or not y.upper()=='Y':
                 print("Delete cancelled")
                 return
-        s = self.saver['data']
-        del s[name]
-
+        del self.saver.file['data/{}'.foramt(name)]
+        self.logger.info("file['data/{}'] deleted.".format(name))
         return
 
     def __del__(self):
+        self.logger.debug("System deleted.")
+        del self.logger
         target = list(vars(self).keys())
         for var in target:
             del vars(self)[var]
         return
 
     def load(self, path, print_tree= True):
-        '''Please indicate system saved folder. return is system object.
-        Recommended way is use of 'load_system(path)'  '''
+        """Load system object from ``.hdf5`` (experimental).
+
+        Parameters
+        ----------
+        path : `string`
+            The File to read. Unfortunately, file-like object is not supported.
+        print_tree : `bool, optional`
+            Skipping show tree when the system loaded. If you try to load multiple system,
+            tree will make bunch of text.
+
+        Raises
+        -------
+        IOError
+            If the input file path does not valid, or cannot be read.
+
+
+        This method is not convenient to load system. We recommend using :py:func:`xxzchain.lib.load_system`
+        """
+
 
         ########check files
         self.saver.open(path)
@@ -478,9 +530,17 @@ class System:
 
 
     ################# basis ################
-    @validation
+    #@validation
     def get_full_sector(self):
-        '''Access full sector of this system.'''
+        """Access to full sector of this system..
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Basis`
+            Basis object of full Hilbert space.
+
+        """
+
         basis = Basis(self)
         state = np.arange(self.max)
         address = {i:i for i in state}
@@ -490,7 +550,7 @@ class System:
         basis.data = self.saver['/basis']
         return basis
 
-    @validation
+    #@validation
     def _basis(self):
         '''return last referenced basis'''
         if self.__basis:
@@ -498,15 +558,46 @@ class System:
         else:
             raise ValueError("There is no basis referenced.")
 
-    @validation
+    #@validation
     def get_basis(self, *arg, **kwarg):
-        '''access to specific basis. return is basis object.
-        if cannot find sector, then system will calculate.
-        positional argument : eigenvalues in order of (Q, K, F, P)
-        keywork argument    : Q = q, K = k, F = f, P = p'''
+        """Get basis of given simultaneous eigenvalue sector.
+
+        Parameters
+        ----------
+        *arg : ``Integer``
+            Simultaneous eigenvalues of basis which you want to get in order (N[, K[, P[, X]]]).
+        **kwarg : 'key( ``Operator`` ) = value( ``eigenvalue`` )'
+            Specific kind of eigenvalues.
+
+            i.e.)
+                ``get_basis(N = 1)``, ``get_basis(n = 1, k = 0)``, ``get_basis(k = 0, p = 1)``
+
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Basis`
+            Basis object to manage specific Hilbert space sector.
+
+
+        .. note::
+            This method automatically search basis within data.
+            if given sector is not found, then system will calculate.
+
+            positional argument : eigenvalues in order of (N, K, P, X)
+
+            keywork argument    : N = n, K = k, P = p, X = x (small and capital letter can be used for identifying each eigenvale.)
+
+        """
+
+
+
+
+        #validation
+        if not self.valid():  return print("Current system is empty or currupted. Please initialize or load first.")
+
         if len(arg)>4 or len(kwarg)>4: raise KeyError("argument number is allowed only under 4.")
         null = (-1,-1,0,0)
-        symbol = 'QKFP'
+        symbol = 'NKPX'
         ### Follow symmetry order QKFP and make symmetry tuple
         if len(kwarg)==0 and len(arg) == 0:
             return self.get_full_sector()
@@ -527,20 +618,23 @@ class System:
                 else:
                     raise AttributeError("Symmetry has no property : {}".format(i))
 
+        self.logger.debug("given argument : {}".format(symmetry))
         #symmetry condtion check
         if symmetry[0]>self.size or symmetry[0]<-1:
-            raise IndexError("given Q = {} is out of bounds for current system size {}.".format(symmetry[0],self.size))
+            raise IndexError("given N = {} is out of bounds for current system size {}.".format(symmetry[0],self.size))
         if symmetry[1]>self.size or symmetry[1]<-1:
             raise IndexError("given K = {} is out of bounds for current system size {}.".format(symmetry[1],self.size))
         if symmetry[2]>1 or symmetry[2]<-1:
-            raise IndexError("given F = {} is out of bounds for eigenvalue of spin inversion.".format(symmetry[2]))
+            raise IndexError("given P = {} is out of bounds for eigenvalue of spin inversion.".format(symmetry[2]))
         if symmetry[3]>1 or symmetry[3]<-1:
-            raise IndexError("given P = {} is out of bounds for eigenvalue of parity.".format(symmetry[3]))
+            raise IndexError("given X = {} is out of bounds for eigenvalue of parity.".format(symmetry[3]))
 
+        self.logger.debug("called basis : {}".format(symmetry))
         basis = Basis(self, *symmetry)
         if not self.saver.is_exist('basis/({},{},{},{})'.format(*symmetry)):
             self.initializer.calculate(symmetry)
         basis.load(*symmetry)
+        self.logger.debug("basis loaded. : {}".format(symmetry))
         self.__basis = basis
         return basis
 
@@ -556,25 +650,92 @@ class System:
 
 
     def print_spin(self, value):
-        '''print spinstate with 0(null site),1(particle site) of give integer format state.'''
+        """Print spin-configuration to binary representation.
+
+        Parameters
+        ----------
+        value : ``Integer``
+            Representation of spin-configuration.
+
+
+
+        This method will print spinstate with 0(null site, down-spin),1(particle site, up-spin) of give integer format state onto console.
+        If you put vanishing state as argument, method will print 'Vanishing'
+        """
         try:
             print("{0:b}".format(value).zfill(self.size))
         except:
             print("Vanishing")
 
     def get_operator(self, op_name):
-        '''Access to operator with operators name.
-        before that, the operator name set on system.
-        if not, it will occur KeyError.'''
+        """Getting operator with its name.
+
+        Parameters
+        ----------
+        op_name : ``str``
+            Operator's name that you've set. You can find list of operator with :py:meth:`xxzchain.core.System.operator_list`.
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.Operator`
+            The operator which is named as ``st_name``.
+
+        Raises
+        -------
+        KeyError
+            If there is no operator that has name as ``op_name``.
+
+
+        .. warning::
+            To access to operator with operators name. before that, the operator name must be set on system.
+        """
+
         return self._Operator[op_name]
 
     def get_data(self, key):
+        """Getting data with its key.
+
+        Parameters
+        ----------
+        key : ``str``
+            Data's name when you save it.
+
+        Returns
+        -------
+        ``np.ndarray``
+            Data which is named as ``key``.
+
+        Raises
+        -------
+        KeyError
+            If there is no data that has name as ``key``.
+
+        """
         if self.saver.is_exist('data/'+str(key)):
             return self.saver.get('data/'+str(key))[:]
         else:
             raise KeyError(key)
 
     def get_function(self, key):
+        """Getting python function with its key.
+
+        Parameters
+        ----------
+        key : ``str`` or ``Integer``
+            Function's name when you save it.
+            Or, order of saving.
+
+        Returns
+        -------
+        function
+            Python function object will be returned.
+
+        Raises
+        -------
+        KeyError
+            If there is no function that has name as ``key``. Or, out of index.
+
+        """
         if isinstance(key, int):
             loader = self.saver['function']
             for function in loader:
@@ -584,6 +745,26 @@ class System:
         return self._function[key]
 
     def get_function_script(self, key):
+        """Getting python function script with its key.
+
+        Parameters
+        ----------
+        key : ``str`` or ``Integer``
+            Function's name when you save it.
+            Or, order of saving.
+
+        Returns
+        -------
+        ``str``
+            Function's source script.
+
+
+        Raises
+        -------
+        KeyError
+            If there is no function that has name as ``key``. Or, out of index.
+
+        """
         loader = self.saver['function']
         if isinstance(key, int):
 
@@ -600,7 +781,19 @@ class System:
 
 
     ##################### no ues ##########################
-    def load_operators(self, op_name_list=None, obj = None):
+    def load_operators_to_var(self, op_name_list=None, obj = None):
+        """Stack given operators to namespace(variables).
+
+        Parameters
+        ----------
+        op_name_list : list of ``str``
+            The name list of operator which you want to load.
+        obj : ``dict``
+            The namespace or dictionary-like object to define operators. Default value is `globals()`
+
+
+        """
+
         if op_name_list is None:
             op_name_list = list(self._Operator.keys())
         if obj is None:
@@ -614,24 +807,71 @@ class System:
                 print("'{}' is already defined on global variables".format(op))
 
     def get_state(self, st_name):
-        '''Access to state with given state name.
-        before that, the operator name set on system.
-        if not, it will occur KeyError.'''
+        """Getting operator with its name.
+
+        Parameters
+        ----------
+        st_name : ``str``
+            Name of state that you've set. You can find list of state with :py:meth:`xxzchain.core.System.state_list`.
+
+        Returns
+        -------
+        :py:class:`xxzchain.core.State`
+            The state which is named as ``st_name``.
+
+        Raises
+        -------
+        KeyError
+            If there is no operator that has name as ``st_name``.
+
+
+        .. warning::
+            To access to state with its name, the state must have name on system.
+        """
         return self._State[st_name]
 
     def data_list(self):
-        '''print data list'''
+        """List of name of data which is stored.
+
+        Returns
+        -------
+        list
+            List of name of data.
+
+        """
         self.saver.ls('data',show_all=True)
 
     def operator_list(self):
-        '''retrun operator name list'''
+        """List of name of operator which is stored.
+
+        Returns
+        -------
+        list
+            List of name of operator.
+
+        """
         return list(self._Operator.keys())
 
-    def State_list(self):
-        '''return state name list'''
+    def state_list(self):
+        """List of name of state which is stored.
+
+        Returns
+        -------
+        list
+            List of name of state.
+
+        """
         return list(self._State.keys())
 
     def function_list(self):
+        """List of name of function stored.
+
+        Returns
+        -------
+        list
+            List of name of function.
+
+        """
         return list(self._function.keys())
 
 
@@ -660,7 +900,7 @@ class Subsystem(System):
 
 class Basis:
     '''Class 'basis' for Hilbert space sector of system.'''
-    def __init__(self, system, Q=None, K=None, F = None, P = None, symmetry = None):
+    def __init__(self, system, N=None, K=None, P = None, X = None, symmetry = None):
         '''make instance of basis that hold given symmetry'''
 
         #dependency
@@ -672,24 +912,24 @@ class Basis:
         if not (symmetry is None):
             if len(symmetry) == 4:
                 self.symmetry = np.array(symmetry)
-                Qp, Kp,Fp,Pp = self.symmetry
+                Np, Kp,Pp,Xp = self.symmetry
             else:
                 raise KeyError("Symmetry is ambiguous. symmetry must have 4 component")
         else:
-            Qp = -1 if Q is None else Q
+            Np = -1 if N is None else N
             Kp = -1 if K is None else K
             Pp = 0 if P is None else P
-            Fp = 0 if F is None else F
-            self.symmetry = np.array([Qp,Kp,Fp,Pp], dtype = np.int8)
+            Xp = 0 if X is None else X
+            self.symmetry = np.array([Np,Kp,Pp,Xp], dtype = np.int8)
 
-        self.Q, self.K, self.F, self.P = self.symmetry
+        self.N, self.K, self.P, self.X = self.symmetry
         self.__eigen = False
         self.temp = np.zeros([self.size],dtype = np.int8)
         self.__state, self.__address, self.__period, self.__counts = None,None,None,None
         self.data = None
         self.Pd_bar, self.Fd_bar = None, None
 
-        self.path = "basis/({},{},{},{})".format(Qp,Kp,Pp,Fp)
+        self.path = "basis/({},{},{},{})".format(Np,Kp,Pp,Xp)
         self.find = np.vectorize(self._find)
         self.distance = np.vectorize(self.distance)
         self.period = np.vectorize(self._period)
@@ -705,7 +945,7 @@ class Basis:
         if (self.symmetry==[-1,-1,0,0]).all():
             rep =  "<Full basis of lattice size {}".format(self.size)
         else:
-            rep = "<Basis sector of lattice size {} with symmetry factor(Q,K,F,P) = ({},{},{},{})".format(self.system.size, *self.symmetry)
+            rep = "<Basis sector of lattice size {} with symmetry factor(N,K,P,X) = ({},{},{},{})".format(self.system.size, *self.symmetry)
 
         rep+='>'
         return rep
@@ -722,6 +962,16 @@ class Basis:
             self.__period = np.ones([len(self.__state)])
         self.__states = np.array(state)
 
+
+    def address():
+        #doc = "The address property."
+        def fget(self):
+            return self.__address
+        def fdel(self):
+            del self.__address
+        return locals()
+    address = property(**address())
+    """return address dict of this basis"""
 
     @property
     def state(self):
@@ -753,7 +1003,6 @@ class Basis:
 
 
     def _find(self, state):
-        '''retrun address from state'''
         return self.__address.get(state,-1)
 
     def state_set(self, x):
@@ -797,10 +1046,10 @@ class Basis:
             if x in self.Pd_bar:
                 coef *=-1
 
-        if self.F == -1:
-            if self.Fd_bar is None:
-                self.Fd_bar = {i:True for i in self.data['Fd_bar'][:]}
-            if x in self.Fd_bar:
+        if self.X == -1:
+            if self.Xd_bar is None:
+                self.Xd_bar = {i:True for i in self.data['Xd_bar'][:]}
+            if x in self.Xd_bar:
                 coef *= -1
         return address, coef
 
@@ -844,15 +1093,27 @@ class Basis:
                     string +="{0:b}  ".format(i).zfill(self.system.size)
                 print(s,string)
 
-    def load(self, Q,K,F,P):
+    def load(self, N,K,P,X):
         '''load from hdf5 based on given symmetry factor.'''
-        self.data = self.system.saver.get('basis/({},{},{},{})'.format(Q,K,F,P))
+        self.data = self.system.saver.get('basis/({},{},{},{})'.format(N,K,P,X))
         self.__state = self.data['state'][:]
-        self.__address = { key:val for key, val in self.data['address'][:]}
+        self.__address = { val : i for i, val in enumerate(self.__state)}
         self.__period = self.data['period'][:]
         if not len(self.__period) == len(self.__state):
             self.__period = np.ones([len(self.__state)])
         if not K == -1:
+            state_set = self.data['state_set'][:]
+            self.__state_set={item[0]:item[np.logical_not(item == -1)][1:] for item in state_set}
+
+            for rs in self.__state_set:
+                for s in self.__state_set[rs][1:]:
+                    self.__address[s] = self.__address[rs]
+
+            self.__period = []
+            for s,p in self.data['period'][:]:
+                if s in self.__address:
+                    self.__period.append(p)
+
             self.__distance = { key:val for key, val in self.data['distance'][:]}
         self.__counts = self.data.attrs['counts']
         self.__load = True
@@ -1840,7 +2101,8 @@ class Initializer:
             x = a
         return i+1
 
-
+    def binary(self, s):
+        return bin(s)[2:].zfill(self.system.size)
 
     def __init__(self, system):
         '''Just need system,
@@ -1848,7 +2110,7 @@ class Initializer:
         self.system = system
         self.translate = np.vectorize(self._rtranslate)
         self.null = (-1,-1,0,0)
-        self.init = [self.Q, self.K, self.F,self.P]
+        self.init = [self.N, self.K, self.P,self.X]
         self.Plist = []
         self.__l, self.__r = int((self.system.size)/16), self.system.size%16
         for i in range(1<<16):
@@ -1857,15 +2119,29 @@ class Initializer:
                 p+= ((i>>j)&1)<<(15-j)
             self.Plist.append(p)
         self.parity = np.vectorize(self.parity)
+        self.logger = self.system.logger.getChild("Initializer")
+        self.logger.debug("Initializer init.")
+
+    def __del__(self):
+        self.logger.debug("initializer deleted.")
+        del self.logger
 
     def calculate(self, symmetry):
         symmetry =tuple(symmetry)
+        self.logger.debug("basis calculation start.")
         for i in range(4):
             test = symmetry[:i+1] + self.null[i+1:]
+            self.logger.debug("target : '{}', check : '{}'".format(symmetry, test))
+
+            # test must have specific sector
             if test == self.null: continue
             if not self.system.saver.is_exist('/basis/({},{},{},{})'.format(*test)):
-                self.init[i](self.system.get_basis(*(symmetry[:i] + self.null[i:])))
+                self.logger.debug("basis ('{}') not found. basis initializer : '{}' started ".format(test, self.init[i]))
+                self.init[i](self.system.get_basis(*(symmetry[:i] + self.null[i:])))  # take basis from prior basis
 
+            if test == symmetry:
+                self.logger.debug("calculation of target is complete. target : '{}'".format(symmetry))
+                break
         '''if not self.system.saver.is_exist('/basis/({},{},{},{})'.format(symmetry[0], *self.null[1:])):
             self.Q(self.system.get_full_sector())
         elif not self.system.saver.is_exist('/basis/({},{},{},{})'.format(*symmetry[:2], *self.null[2:])):
@@ -1873,13 +2149,14 @@ class Initializer:
         #elif not self.system.saver.is_exist('/basis/({},{},{},{})'.format(symmetry[:3], *self.null[3:])):
 
 
-    def Q(self, basis):
+    def N(self, basis):
         '''Initializer which find all small sector based on spin conservation.'''
         target = basis.state
         symmetry = basis.symmetry.copy()
+        logger = self.logger.getChild("N")
         if (not symmetry[2]==0):
             raise EnvironmentError("Spin conserving and spin inversion are not commute on given basis.")
-        print("Initializing spin conserving sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry),end = '\r')
+        logger.info("Initializing spin conserving sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
 
         #calculate basis sector
         state, address, period, counts = [],[],[],np.zeros([self.system.size+1],dtype = np.int64)
@@ -1888,25 +2165,29 @@ class Initializer:
             address.append({})
             period.append([])
             counts[i] = 0
-        Q = self._npar_num(target)
+        N = self._npar_num(target)
         if symmetry[1] == -1:
-            for q,s in zip(Q,target):
-                state[q].append(s)
-                address[q][s] = counts[q]
-                counts[q]+=1
+            for n,s in zip(N,target):
+                logger.debug("\n\ttarget state : {},\n\tspin representation : {}, \n\tresult : {}".format(s, self.binary(s), n))
+                state[n].append(s)
+                address[n][s] = counts[n]
+                counts[n]+=1
         else:
-            raise SystemError("if this error occur then must debug")
+            raise SystemError("if this error occur then must be debugging")
 
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
-        for q in range(self.system.size+1):
-            assert len(state[q]) == counts[q], 'component and its label unmatched'
-            symmetry[0] = q
+        for n in range(self.system.size+1):
+            assert len(state[n]) == counts[n], 'component and its label unmatched'
+            symmetry[0] = n
             folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-            folder.create_dataset('state',data = np.array(state[q]),compression = 'lzf')
-            folder.create_dataset('address',data = np.array(list(address[q].items())),compression = 'lzf')
-            folder.create_dataset('period',data = np.array(period[q]),compression = 'lzf')
-            folder.attrs['counts'] = counts[q]
+            folder.create_dataset('state',data = np.array(state[n]),compression = 'lzf') # NOTE: address will be deprecated by optimizing
+            #folder.create_dataset('address',data = np.array(list(address[n].items())),compression = 'lzf')
+            folder.create_dataset('period',data = np.array(period[n]),compression = 'lzf')
+            folder.attrs['counts'] = counts[n]
+            logger.debug("'{}' created, and 'state', 'period' added".format(symmetry))
+        logger.info("Calculation ended for basis : {}".format(basis.symmetry.copy()))
+        del logger
 
 
 
@@ -1918,15 +2199,15 @@ class Initializer:
         #get infomation of target basis
         st = basis.state
         symmetry = basis.symmetry.copy()
-        print("Initializing momentum sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry),end = '\r')
+        logger = self.logger.getChild('K')
+        logger.info("Initializing momentum sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
         #make new empty storage
-        state, address, period, distance, counts = [],[],[],[],[]# [[] for q in range(self.size+1)],[[] for q in range(self.size+1)],[[] for q in range(self.size+1)],[[] for q in range(self.size+1)]
+        state, address, period, distance, counts = [],[],{},{s:-1 for s in st},[]# [[] for q in range(self.size+1)],[[] for q in range(self.size+1)],[[] for q in range(self.size+1)],[[] for q in range(self.size+1)]
         states = {}
         for k in range(self.system.size):
             state.append([])
             address.append({})
-            period.append([])
-            distance.append({s:0 for s in st})
+            #period.append([])
             counts.append(0)
 
 
@@ -1938,35 +2219,53 @@ class Initializer:
 
         for s,p in zip(st,pe):
             stpr[s] = p  #get period from state
+            if p<0:
+                if not distance.get(s,False):
+                    logger.critical("State('{}') which is not included traslational symmetry is founded.".format(s))
+                continue
+                print(s, p)
+                address[k][s] = address[k][self._rtranslate(s)] #acsending order. so, the bigger one comes later.
+
+            #debug
+            elif p ==0:
+                raise ValueError("something wrong with state ({}) got period 0.".format(s))
+            else:
+                #make representative state that is consist of states.
+                logger.debug("State '{}' is selected as representative state(RS) with period '{}'.".format(s, p))
+                states[s] = [s]                  #state_set (set of states which matched with translational symmetry)
+                period[s] = p
+                ts = s
+                distance[s] = 0
+                for l in range(p-1):
+                    ts = self._rtranslate(ts) #bit shift to left periodically
+                    logger.debug("\tT^{:>2} |{}> : {}  ({:>2}).".format(l+1, self.binary(s), self.binary(ts),ts))
+                    states[s].append(ts)
+                    distance[ts] = l+1
+                logger.debug("All members of RS '{}' is founded.")
+            logger.debug("And RS '{}' is belonging to".format(s))
             for k in range(self.system.size):
-                if p<0:
-                    continue
-                    print(s, p)
-                    address[k][s] = address[k][self._rtranslate(s)]
-                #debug
-                elif p ==0:
-                    raise ValueError("something wrong when state ({}) got period 0.".format(s))
                 if k*p % self.system.size == 0:
                     state[k].append(s)
-                    if k == 0: states[s] = [s]
-                    address[k][s] = counts[k]
-                    ts = s
-                    for l in range(p-1):
-                        ts = self._rtranslate(ts)
-                        if k == 0: states[s].append(ts)
-                        address[k][ts] = counts[k]
-                        distance[k][ts] = l+1
-                    period[k].append(p)
+                    logger.debug("\tk = {:>2} momentum sector.".format(k, s, p))
+                    #address[k][s] = counts[k]
+                    #period[k].append(p)
                     counts[k] += 1
         l = len(state[0])
         kstate = -1*np.ones([l,self.system.size+1],dtype = np.int64)
         i=0
         for key, val in list(states.items()):
             kstate[i,0] = key
-            assert len(val) == period[0][address[0][key]]
+            assert len(val) == period[key]
             for j,value in enumerate(val):
                 kstate[i,j+1] = value
             i+=1
+        for key in distance:
+            if distance[key] == -1:
+                logger.critical("State '' still has negative distance(assertion).")
+                assert distance[key] != -1, "state '' is not considered.".format(key)
+
+
+        #deprecated code
         '''dist = {}
         adrs = {}
         state_to_period = lambda x: stpr.get(x)
@@ -1994,29 +2293,37 @@ class Initializer:
             symmetry[1] = k
             folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
             folder.create_dataset('state',data = np.array(state[k]),compression = 'lzf')
-            folder.create_dataset('address',data = np.array(list(address[k].items())),compression = 'lzf')
-            folder.create_dataset('period',data = np.array(period[k]),compression = 'lzf')
+            #folder.create_dataset('address',data = np.array(list(address[k].items())),compression = 'lzf')
+
+            logger.debug("'{}' created, and 'state', 'period', 'distance', 'state_set' are added".format(symmetry))
             if k ==0 :
-                folder.create_dataset('distance',data = np.array(list(distance[k].items())),compression = 'lzf')
+                folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+                folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
                 folder.create_dataset('state_set',data = kstate,compression = 'lzf')
                 ks = folder['state_set']
                 ds = folder['distance']
+                peri = folder['period']
             else:
                 folder['state_set'] = ks
                 folder['distance'] = ds
+                folder['period'] = peri
             folder.attrs['counts'] = counts[k]
+        logger.info("Calculation ended for basis : {}".format(basis.symmetry.copy()))
+        del logger
 
-    def F(self, basis):
+    def X(self, basis):
         '''initializer for spin inversion symmetry'''
         full = self.system.max - 1
         target = basis.state
         symmetry = basis.symmetry.copy()
-        origin_address = basis.data['address']
+        #origin_address = basis.address
+        logger = self.logger.getChild("X")
         if not (symmetry[0] == self.system.size/2 or symmetry[0]==-1): raise EnvironmentError("Spin conserving and spin inversion are not commute.")
-        print("Initializing spin inversion sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry),end = '\r')
+        logger.info("Initializing spin inversion sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
+
         #calculate basis sector
-        s_state, s_address, s_period, s_counts = [],{},[],0
-        d_state, d_address, d_period, d_counts = [],{},[],0
+        s_state, s_address, s_period, s_counts = [],{},{},0
+        d_state, d_address, d_period, d_counts = [],{},{},0
         state_set = {}
         d_bar = []
         '''for i in range(2):
@@ -2027,43 +2334,54 @@ class Initializer:
 
         F = target^full
 
-
-        if symmetry[1] == -1:
+        # WARNING:  must be check for period 4 in x and p
+        if symmetry[1] == -1: # no momentum representative sector
             for f,s in zip(F,target):
                 if s<f:
+                    logger.debug("target : {}, flip : {}, selected doublet.".format(s,f))
                     d_state.append(s)
                     d_address[s] = d_counts
                     d_counts +=1
-                    d_period.append(2)
+                    state_set[s] = [s,f]
+                    #d_period.append(2)
                 elif s == f:
+                    logger.debug("target : {}, flip : {}, singlet.".format(s,f))
                     s_state.append(s)
                     s_address[s] = s_counts
                     s_counts +=1
-                    s_period.append(1)
+                    #s_period.append(1)
                 else:
-                    d_address[s] = d_address[f]
+                    logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
+                    d_address[s] = d_address[f] #if f is not in d_address occur error
+                    #check representative which is not selected = d_bar
                     d_bar.append(s)
+            s_period = {s_state[i] : 1 for i in range(len(s_state))}#np.ones([len(s_state)], dtype = np.int32)
+            d_period = {d_state[i] : 2 for i in range(len(d_state))}#2*np.ones([len(d_state)], dtype = np.int32)
         elif symmetry[1] == 0:
             distance = {}
             for f,s in zip(F,target):
+                #find representative of result
                 fs = basis.state[basis.find(f)]
                 if s == fs:
+                    logger.debug("target : {}, flip : {}, singlet.".format(s,f))
                     s_state.append(s)
                     for comp in basis.state_set(s):
                         s_address[comp] = s_counts
                         distance[comp] = basis.distance(comp)
                     s_counts +=1
                     state_set[s] = basis.state_set(s)
-                    s_period.append(basis.period(basis.find(s)))
+                    s_period[s] = basis.period(basis.find(s))
                 elif s<fs:
+                    logger.debug("target : {}, flip : {}, selected doublet.".format(s,f))
                     d_state.append(s)
                     state_set[s] = list(basis.state_set(s))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_counts
                         distance[comp] = basis.distance(comp)
                     d_counts +=1
-                    d_period.append(basis.period(basis.find(s))+basis.period(basis.find(fs)))
+                    d_period[s] = basis.period(basis.find(s))+basis.period(basis.find(fs))
                 else:
+                    logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_address[fs]
                         distance[comp] = basis.distance(comp)
@@ -2071,49 +2389,64 @@ class Initializer:
                         d_bar.append(comp)
         assert len(s_state) == s_counts
         assert len(d_state) == d_counts
-        states = -1*np.ones([s_counts+d_counts,self.system.size*2+1],np.int32)
+        states = -1*np.ones([s_counts+d_counts,self.system.size*4+1],np.int32)
         for i,key in enumerate(state_set):
+            logger.debug("Family of '{}' :".format(key))
             states[i,0] = key
             for j,value in enumerate(state_set[key]):
+                logger.debug("\t'{}',".format(value))
                 states[i,j+1] = value
+            logger.debug("Total {} states Done.".format(j+1))
 
         for key in d_address:
             s_address[key] = d_address[key]+s_counts
+
+        period = {}
+        for s in s_period:
+            period[s] = s_period[s]
+        for s in d_period:
+            period[s] = d_period[s]
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
-        symmetry[2] = 1
+        symmetry[3] = 1
         folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-        symmetry[2] = -1
+        symmetry[3] = -1
         folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
         folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
         folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
 
         folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
         folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
+        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        folder_['period'] = folder['period']
+        #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
+        #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
+        folder.create_dataset('state_set',data = states, compression = 'lzf')
+        folder_['state_set'] = folder['state_set']
 
-        folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
-        folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
-        folder_.create_dataset('Fd_bar',data = np.array(d_bar),compression = 'lzf')
+        if symmetry[2]==-1:
+            folder_['Pd_bar'] = bsaver['({},{},{},{})/Pd_bar'.format(symmetry[0],symmetry[1],-1,0)]
+            folder['Pd_bar'] = bsaver['({},{},{},{})/Pd_bar'.format(symmetry[0],symmetry[1],-1,0)]
+        folder_.create_dataset('Xd_bar',data = np.array(d_bar),compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
-            folder.create_dataset('state_set',data = states, compression = 'lzf')
             folder_['distance'] = folder['distance']
-            folder_['state_set'] = folder['state_set']
+
         folder.attrs['counts'] = s_counts + d_counts
         folder_.attrs['counts'] = d_counts
-
 
     def P(self, basis):
         '''initializer for parity symmetry(same methodology with F)'''
         full = self.system.max - 1
         target = basis.state
         symmetry = basis.symmetry.copy()
-        origin_address = basis.data['address']
+        logger = self.logger.getChild("P")
+        #origin_address = basis.data['address']
         if not (symmetry[1] == self.system.size/2 or symmetry[1]==-1 or symmetry[1]==0): raise EnvironmentError("Translation and parity are not commute.")
-        print("Initializing parity sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry),end = '\r')
+        logger.info("Initializing parity sectors of given basis : ({},{},{},{})\t\t\t\t".format(*symmetry))
         #calculate basis sector
-        s_state, s_address, s_period, s_counts = [],{},[],0
-        d_state, d_address, d_period, d_counts = [],{},[],0
+        s_state, s_address, s_period, s_counts = [],{},{},0
+        d_state, d_address, d_period, d_counts = [],{},{},0
         state_set = {}
         d_bar = []
         '''for i in range(2):
@@ -2131,12 +2464,12 @@ class Initializer:
                     d_state.append(s)
                     d_address[s] = d_counts
                     d_counts +=1
-                    d_period.append(2)
+                    d_period[s] = 2
                 elif s == f:
                     s_state.append(s)
                     s_address[s] = s_counts
                     s_counts +=1
-                    s_period.append(1)
+                    s_period[s] = 1
                 else:
                     d_address[s] = d_address[f]
                     d_bar.append(s)
@@ -2145,22 +2478,25 @@ class Initializer:
             for f,s in zip(F,target):
                 fs = basis.state[basis.find(f)]
                 if s == fs:
+                    logger.debug("target : {}, flip : {}({}), singlet.".format(s,f,fs))
                     s_state.append(s)
                     for comp in basis.state_set(s):
                         s_address[comp] = s_counts
                         distance[comp] = basis.distance(comp)
                     s_counts +=1
                     state_set[s] = basis.state_set(s)
-                    s_period.append(basis.period(basis.find(s)))
+                    s_period[s] = (basis.period(basis.find(s)))
                 elif s<fs:
+                    logger.debug("target : {}, flip : {}, selected doublet.".format(s,f))
                     d_state.append(s)
                     state_set[s] = list(basis.state_set(s))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_counts
                         distance[comp] = basis.distance(comp)
                     d_counts +=1
-                    d_period.append(basis.period(basis.find(s))+basis.period(basis.find(fs)))
+                    d_period[s] = (basis.period(basis.find(s))+basis.period(basis.find(fs)))
                 else:
+                    logger.debug("target : {}, flip : {}, rejected doublet.".format(s,f))
                     for comp in basis.state_set(s):
                         d_address[comp] = d_address[fs]
                         distance[comp] = basis.distance(comp)
@@ -2168,7 +2504,7 @@ class Initializer:
                         d_bar.append(comp)
         assert len(s_state) == s_counts
         assert len(d_state) == d_counts
-        states = -1*np.ones([s_counts+d_counts,self.system.size*4+1],np.int32)
+        states = -1*np.ones([s_counts+d_counts,self.system.size*2+1],np.int32) #max period is 4L L from k, 2 from x and r respectively
         for i,key in enumerate(state_set):
             states[i,0] = key
             for j,value in enumerate(state_set[key]):
@@ -2176,11 +2512,17 @@ class Initializer:
 
         for key in d_address:
             s_address[key] = d_address[key]+s_counts
+
+        period = {}
+        for s in s_period:
+            period[s] = s_period[s]
+        for s in d_period:
+            period[s] = d_period[s]
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
-        symmetry[3] = 1
+        symmetry[2] = 1
         folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-        symmetry[3] = -1
+        symmetry[2] = -1
         folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
         folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
         folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
@@ -2188,20 +2530,19 @@ class Initializer:
         folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
         folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
 
-        folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
-        folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
-
-        if symmetry[2]==-1:
-            folder_['Fd_bar'] = bsaver['({},{},{},{})/Fd_bar'.format(symmetry[0],symmetry[1],-1,0)]
-            folder['Fd_bar'] = bsaver['({},{},{},{})/Fd_bar'.format(symmetry[0],symmetry[1],-1,0)]
+        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        folder_['period'] = folder['period']
+        #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
+        #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
         folder_.create_dataset('Pd_bar',data = np.array(d_bar),compression = 'lzf')
+        folder.create_dataset('state_set',data = states, compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
-            folder.create_dataset('state_set',data = states, compression = 'lzf')
             folder_['distance'] = folder['distance']
             folder_['state_set'] = folder['state_set']
         folder.attrs['counts'] = s_counts + d_counts
         folder_.attrs['counts'] = d_counts
+
 
 
 class OperatorGroup:

@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 test = xxz.System(21)
 # %%
 test.initialize('test')
+test.__doc__
 # %%
 a = test.get_operator('H_fin')
 # %%
@@ -68,7 +69,8 @@ H_fin.latex = r'''H_{fin} = \sum_i^L -t\left(b^\dagger_{i+1}b_i + b^\dagger_{i}b
 +V'\left(n_i - \frac{1}{2}\right)\left(n_{i+2}  - \frac{1}{2}\right)\\
 (t=1.0,V=1.0, \quad t'=V'=0.24)'''
 # %%
-test.save()
+test.Hamiltonian = H_ini
+
 # %%
 H_ini.latex
 # %%

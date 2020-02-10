@@ -1604,6 +1604,8 @@ class State:
                 return self
             H = self.system.Hamiltonian
         t = np.array(t_range)
+        if len(self)!= 1:
+            raise NotImplementedError
         eigen = np.exp(-1j*H.get_eigenvalue(self.basis).reshape(-1,1)@t.reshape(1,-1))*self.eigencoef
         temp = State(self.basis, eigen.T, eigen=True)
         temp.time = t
