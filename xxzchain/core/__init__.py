@@ -2027,6 +2027,38 @@ class Saver:
                     print(tapping+item.name+" : dir")
             else:
                 print(tapping+name)
+
+    def initialize_basis(self, symmetry, **kwargs):
+        """Initialize hdf5 save file on specific location.
+
+        Parameters
+        ----------
+        symmetry : `list`
+            basis symmtry. this will be a save location.
+
+        kwargs
+        ---------
+            There are several things for saving.
+
+        Return
+        ---------
+        `h5py.Group`
+            The Group object of basis.
+        """
+        bsaver = self.file.require_group('/basis')
+        folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+        if 'counts' in kwargs:
+            folder.attrs['counts'] = kwargs['counts']
+            del kwargs['counts']
+
+        for i in kwargs:
+            folder.create_dataset(i,data = kwargs[i],compression = 'lzf') # NOTE: address will be deprecated by optimizing
+            #folder.create_dataset('address',data = np.array(list(address[n].items())),compression = 'lzf')
+            #folder.create_dataset('period',data = np.array(period[n]),compression = 'lzf')
+            #folder.attrs['counts'] = counts[n]
+        #logger.debug("'{}' created, and 'state', 'period' added".format(symmetry))
+        return folder
+
     @property
     def file(self):
         return
@@ -2040,14 +2072,17 @@ class Saver:
     @attrs.getter
     def attrs(self):
         return self.file.attrs
-    def require_group(self, *arg,**kwarg): return self.file.require_group(*arg,**kwarg)
-    def get(self, *arg,**kwarg): return self.file.get(*arg,**kwarg)
-    def flush(self):          return self.file.flush()
-    def items(self):          return self.file.items()
-    def keys(self):           return self.file.keys()
-    def values(self):         return self.file.values()
-    def __getitem__(self, key):         return self.file[key]
-    def __delitem__(self, key):         del self.file[key]
+
+    #mapping original h5py File func.
+    def require_group(self, *arg,**kwarg):  return self.file.require_group(*arg,**kwarg)
+    def get(self, *arg,**kwarg):            return self.file.get(*arg,**kwarg)
+    def flush(self):                        return self.file.flush()
+    def items(self):                        return self.file.items()
+    def keys(self):                         return self.file.keys()
+    def values(self):                       return self.file.values()
+    def __getitem__(self, key):             return self.file[key]
+    def __delitem__(self, key):             del self.file[key]
+
     def __setitem__(self, key, value):
         if self.is_exist(key):
             self.file[key] = value
@@ -2182,23 +2217,24 @@ class Initializer:
         N = self._npar_num(target)
         if symmetry[1] == -1:
             for n,s in zip(N,target):
-                logger.debug("\n\ttarget state : {},\n\tspin representation : {}, \n\tresult : {}".format(s, self.binary(s), n))
+                #logger.debug("\n\ttarget state : {},\n\tspin representation : {}, \n\tresult : {}".format(s, self.binary(s), n))
                 state[n].append(s)
                 address[n][s] = counts[n]
                 counts[n]+=1
         else:
-            raise SystemError("if this error occur then must be debugging")
+            raise SystemError("if this error occurs, then you must do debugging.")
 
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
         for n in range(self.system.size+1):
             assert len(state[n]) == counts[n], 'component and its label unmatched'
             symmetry[0] = n
-            folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-            folder.create_dataset('state',data = np.array(state[n]),compression = 'lzf') # NOTE: address will be deprecated by optimizing
+            self.system.saver.initialize_basis(symmetry, state = np.array(state[n]), period =np.array(period[n]), counts =counts[n] )
+            #folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+            #folder.create_dataset('state',data = np.array(state[n]),compression = 'lzf') # NOTE: address will be deprecated by optimizing
             #folder.create_dataset('address',data = np.array(list(address[n].items())),compression = 'lzf')
-            folder.create_dataset('period',data = np.array(period[n]),compression = 'lzf')
-            folder.attrs['counts'] = counts[n]
+            #folder.create_dataset('period',data = np.array(period[n]),compression = 'lzf')
+            #folder.attrs['counts'] = counts[n]
             logger.debug("'{}' created, and 'state', 'period' added".format(symmetry))
         logger.info("Calculation ended for basis : {}".format(basis.symmetry.copy()))
         del logger
@@ -2273,10 +2309,11 @@ class Initializer:
             for j,value in enumerate(val):
                 kstate[i,j+1] = value
             i+=1
+
         for key in distance:
             if distance[key] == -1:
                 logger.critical("State '' still has negative distance(assertion).")
-                assert distance[key] != -1, "state '' is not considered.".format(key)
+                assert distance[key] != -1, "state '{}' is not considered.".format(key)
 
 
         #deprecated code
@@ -2302,18 +2339,22 @@ class Initializer:
                     distance[k][s] = dist[s]'''
 
         bsaver = self.system.saver.file.require_group('/basis')
+
         for k in range(self.system.size):
             assert len(state[k]) == counts[k], 'component and its label unmatched'
             symmetry[1] = k
-            folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-            folder.create_dataset('state',data = np.array(state[k]),compression = 'lzf')
+            self.system.saver.initialize_basis(symmetry, counts=counts[k], state=np.array(state[k]))
+            #folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+            #folder.create_dataset('state',data = np.array(state[k]),compression = 'lzf')
             #folder.create_dataset('address',data = np.array(list(address[k].items())),compression = 'lzf')
 
             logger.debug("'{}' created, and 'state', 'period', 'distance', 'state_set' are added".format(symmetry))
             if k ==0 :
-                folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
-                folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
-                folder.create_dataset('state_set',data = kstate,compression = 'lzf')
+                folder = self.system.saver.initialize_basis(symmetry, counts=counts[k], state=np.array(state[k]))
+                self.system.saver(symmetry, period=np.array(list(period.items())),distance=np.array(list(distance.items())), state_set=kstate)
+                #folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+                #folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
+                #folder.create_dataset('state_set',data = kstate,compression = 'lzf')
                 ks = folder['state_set']
                 ds = folder['distance']
                 peri = folder['period']
@@ -2321,7 +2362,7 @@ class Initializer:
                 folder['state_set'] = ks
                 folder['distance'] = ds
                 folder['period'] = peri
-            folder.attrs['counts'] = counts[k]
+            #folder.attrs['counts'] = counts[k]
         logger.info("Calculation ended for basis : {}".format(basis.symmetry.copy()))
         del logger
 
@@ -2423,20 +2464,35 @@ class Initializer:
         #save sectors
         bsaver = self.system.saver.file.require_group('/basis')
         symmetry[3] = 1
-        folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+        folder = self.system.saver.initialize_basis(symmetry,
+                                    state=np.array(s_state+d_state),
+                                    address=np.array(list(s_address.items())),
+                                    period = np.array(list(period.items())),
+                                    state_set= states,
+                                    counts =s_counts + d_counts
+                                    )
+        #folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
         symmetry[3] = -1
-        folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-        folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
-        folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
+        folder_ = self.system.saver.initialize_basis(symmetry,
+                                    state=np.array(d_state),
+                                    address=np.array(list(d_address.items())),
+                                    Xd_bar=np.array(d_bar),
+                                    counts=d_counts
+                                    )
 
-        folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
-        folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
-        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
-        folder_['period'] = folder['period']
+        folder_['period'],folder_['state_set'] = folder['period'],folder['state_set']
+        #folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+        #folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
+        #folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
+
+        #folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
+        #folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
+        #folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        #folder_['period'] = folder['period']
         #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
         #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
-        folder.create_dataset('state_set',data = states, compression = 'lzf')
-        folder_['state_set'] = folder['state_set']
+        #folder.create_dataset('state_set',data = states, compression = 'lzf')
+        #folder_['state_set'] = folder['state_set']
 
         if symmetry[2]==-1:
             folder_['Pd_bar'] = bsaver['({},{},{},{})/Pd_bar'.format(symmetry[0],symmetry[1],-1,0)]
@@ -2446,8 +2502,8 @@ class Initializer:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
             folder_['distance'] = folder['distance']
 
-        folder.attrs['counts'] = s_counts + d_counts
-        folder_.attrs['counts'] = d_counts
+        #folder.attrs['counts'] = s_counts + d_counts
+        #folder_.attrs['counts'] = d_counts
 
     def P(self, basis):
         '''initializer for parity symmetry(same methodology with F)'''
@@ -2532,30 +2588,44 @@ class Initializer:
             period[s] = s_period[s]
         for s in d_period:
             period[s] = d_period[s]
+
         #save sectors
-        bsaver = self.system.saver.file.require_group('/basis')
         symmetry[2] = 1
-        folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+        folder = self.system.saver.initialize_basis(symmetry,
+                                            state=np.array(s_state+d_state),
+                                            address=np.array(list(s_address.items())),
+                                            period=np.array(list(period.items())),
+                                            state_set=states,
+                                            counts=s_counts + d_counts
+                                            )
+        #bsaver = self.system.saver.file.require_group('/basis')
+        #folder = bsaver.require_group('({},{},{},{})'.format(*symmetry))
         symmetry[2] = -1
-        folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
-        folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
-        folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
+        folder_ = self.system.saver.initialize_basis(symmetry,
+                                            state=np.array(d_state),
+                                            address=np.array(list(d_address.items())),
+                                            Pd_bar=np.array(d_bar),
+                                            counts=d_counts
+                                            )
+        #folder_ = bsaver.require_group('({},{},{},{})'.format(*symmetry))
+        #folder.create_dataset('state',data = np.array(s_state+d_state),compression = 'lzf')
+        #folder_.create_dataset('state',data = np.array(d_state),compression = 'lzf')
 
-        folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
-        folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
+        #folder.create_dataset('address',data = np.array(list(s_address.items())),compression = 'lzf')
+        #folder_.create_dataset('address',data = np.array(list(d_address.items())),compression = 'lzf')
 
-        folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
+        #folder.create_dataset('period',data = np.array(list(period.items())),compression = 'lzf')
         folder_['period'] = folder['period']
         #folder.create_dataset('period',data = np.array(s_period+d_period),compression = 'lzf')
         #folder_.create_dataset('period',data = np.array(d_period),compression = 'lzf')
-        folder_.create_dataset('Pd_bar',data = np.array(d_bar),compression = 'lzf')
-        folder.create_dataset('state_set',data = states, compression = 'lzf')
+        #folder_.create_dataset('Pd_bar',data = np.array(d_bar),compression = 'lzf')
+        #folder.create_dataset('state_set',data = states, compression = 'lzf')
         if symmetry[1] == 0:
             folder.create_dataset('distance',data = np.array(list(distance.items())),compression = 'lzf')
             folder_['distance'] = folder['distance']
             folder_['state_set'] = folder['state_set']
-        folder.attrs['counts'] = s_counts + d_counts
-        folder_.attrs['counts'] = d_counts
+        #folder.attrs['counts'] = s_counts + d_counts
+        #folder_.attrs['counts'] = d_counts
 
 
 
